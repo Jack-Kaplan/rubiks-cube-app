@@ -14,7 +14,7 @@ const COLORS = {
     5: '#0066CC', // Blue   (Back, Z-)
 };
 
-const CUBIE_SIZE = 0.45; // half-width of each cubie (< 0.5 leaves gaps)
+const CUBIE_SIZE = 0.49; // half-width of each cubie (< 0.5 leaves gaps)
 let moveDuration = 300;
 const INNER_COLOR = '#222';
 
@@ -441,7 +441,7 @@ function project(x, y, z) {
     const z1 = x * Math.sin(viewYaw) + z * Math.cos(viewYaw);
     const y1 = y * Math.cos(viewPitch) - z1 * Math.sin(viewPitch);
     const z2 = y * Math.sin(viewPitch) + z1 * Math.cos(viewPitch);
-    const s = Math.pow(1.4, z2 / 150);
+    const s = 800 / (800 - z2);
     return { x: CX + x1 * s, y: CY + y1 * s, z: z2 };
 }
 
@@ -570,7 +570,7 @@ const sizeInput = document.getElementById('cube-size');
 if (sizeInput) {
     sizeInput.value = N;
     sizeInput.addEventListener('change', () => {
-        const newN = Math.max(2, Math.min(10, parseInt(sizeInput.value) || 3));
+        const newN = Math.max(1, Math.min(10, parseInt(sizeInput.value) || 3));
         sizeInput.value = newN;
         N = newN;
         updateScaling();
@@ -602,8 +602,6 @@ document.addEventListener('keydown', (e) => {
         const layer = bm.side * (half - (selectedDepth - 1));
         const dir = e.shiftKey ? -bm.dir : bm.dir;
         queueMove(bm.axis, layer, dir);
-        selectedDepth = 1;
-        updateLayerDisplay();
     }
 });
 
@@ -625,8 +623,8 @@ window.addEventListener('mousemove', (e) => {
     const dx = e.clientX - dragStartX;
     const dy = e.clientY - dragStartY;
     if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMoved = true;
-    viewYaw += dx * 0.01;
-    viewPitch += dy * 0.01;
+    viewYaw -= dx * 0.01;
+    viewPitch -= dy * 0.01;
     viewPitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, viewPitch));
     dragStartX = e.clientX;
     dragStartY = e.clientY;
