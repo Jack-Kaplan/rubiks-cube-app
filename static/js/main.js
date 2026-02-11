@@ -34,8 +34,8 @@ let _logStickers = false;
 //
 // Overlaps:  Z∩X → Yellow,Red (top)  |  Z∩Y → Green,Cyan (lower-left)  |  X∩Y → Pink,Blue (lower-right)
 const TREFOIL = {
-    centerDist: 55,            // distance from canvas center to each ring set center
-    ringRadii: [50, 75, 100], // radii for layers -1, 0, +1
+    centerDist: 72,            // distance from canvas center to each ring set center
+    ringRadii: [66, 92, 117], // radii for layers -1, 0, +1
     // Ring set center angles indexed by axis: [X-axis, Y-axis, Z-axis]
     ringSetAngles: [330, 90, 210],
 };
