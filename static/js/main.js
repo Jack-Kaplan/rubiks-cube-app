@@ -1,6 +1,7 @@
 /**
  * Rubik's Cube - Minimal 3D Visualization
  * Single-file implementation: cube state, animation, and 3D rendering.
+ * Supports N×N×N cubes with automatic 2D/3D scaling.
  */
 
 // --- Colors ---
@@ -13,7 +14,6 @@ const COLORS = {
     5: '#0066CC', // Blue   (Back, Z-)
 };
 
-const SPACING = 104;
 const CUBIE_SIZE = 0.45; // half-width of each cubie (< 0.5 leaves gaps)
 let moveDuration = 300;
 const INNER_COLOR = '#222';
@@ -22,20 +22,20 @@ const DEBUG = false;    // set true to enable 3D sticker color logging
 const DEBUG_2D = false; // set true to enable 2D trefoil sticker logging
 let _logStickers = false;
 
+// --- N×N×N Configuration ---
+let N = 3;
+let half = (N - 1) / 2;
+let spacing = Math.floor(310 / N);
+let stickerRadius = Math.max(4, Math.min(16, Math.floor(48 / N)));
+let selectedDepth = 1;
+
 // --- 2D Trefoil Configuration ---
 // 3-circle Venn diagram: one ring set per rotation axis.
-// Each ring set has 3 concentric rings (one per layer along that axis).
+// Each ring set has N concentric rings (one per layer along that axis).
 // Each face is in 2 ring sets; stickers sit at circle-circle intersection points.
-//
-// Ring sets:
-//   Z-axis ring set: Green(2), Yellow(0), Cyan(3), Red(1)
-//   Y-axis ring set: Blue(5), Cyan(3), Pink(4), Green(2)
-//   X-axis ring set: Red(1), Pink(4), Yellow(0), Blue(5)
-//
-// Overlaps:  Z∩X → Yellow,Red (top)  |  Z∩Y → Green,Cyan (lower-left)  |  X∩Y → Pink,Blue (lower-right)
 const TREFOIL = {
     centerDist: 136,           // distance from canvas center to each ring set center
-    ringRadii: [180, 210, 240], // radii for layers -1, 0, +1
+    ringRadii: [],             // computed dynamically based on N
     // Ring set center angles indexed by axis: [X-axis, Y-axis, Z-axis]
     ringSetAngles: [30, 270, 150],
 };
@@ -44,17 +44,29 @@ const INNER_FACES = new Set([0, 3, 4]); // Yellow, Cyan, Pink
 // Face axis lookup: face index → its axis
 const FACE_AXIS = [1, 1, 0, 0, 2, 2];
 
-const STICKER_RADIUS = 16;
+function updateScaling() {
+    half = (N - 1) / 2;
+    spacing = Math.floor(310 / N);
+    stickerRadius = Math.max(4, Math.min(16, Math.floor(48 / N)));
+    // Trefoil ring radii: N evenly spaced values centered around 210
+    // Spacing shrinks as 90/N so total span grows slowly (60→81 for N=3→10)
+    const ringSpacing = 90 / N;
+    const minR = 210 - ringSpacing * (N - 1) / 2;
+    TREFOIL.ringRadii = Array.from({length: N}, (_, i) => minR + i * ringSpacing);
+}
+updateScaling();
 
 // --- Cube State ---
 
 function createCube() {
     const cubies = [];
     const S = CUBIE_SIZE;
-    for (let x = -1; x <= 1; x++) {
-        for (let y = -1; y <= 1; y++) {
-            for (let z = -1; z <= 1; z++) {
-                if (x === 0 && y === 0 && z === 0) continue;
+    for (let xi = 0; xi < N; xi++) {
+        for (let yi = 0; yi < N; yi++) {
+            for (let zi = 0; zi < N; zi++) {
+                // Skip interior cubies (not on any outer face)
+                if (xi > 0 && xi < N - 1 && yi > 0 && yi < N - 1 && zi > 0 && zi < N - 1) continue;
+                const x = xi - half, y = yi - half, z = zi - half;
                 // 8 corners of this cubie box, ordered: [±S, ±S, ±S]
                 const corners = [];
                 for (let cx = -1; cx <= 1; cx += 2)
@@ -71,7 +83,7 @@ function createCube() {
 function applyRotation(cubies, axis, layer, dir) {
     const [a, b] = [0, 1, 2].filter(i => i !== axis);
     for (const c of cubies) {
-        if (Math.round(c.m[axis]) !== layer) continue;
+        if (Math.abs(c.m[axis] - layer) > 0.01) continue;
         const x = c.m[a], y = c.m[b];
         c.m[a] = -y * dir;
         c.m[b] = x * dir;
@@ -83,18 +95,22 @@ function applyRotation(cubies, axis, layer, dir) {
     }
 }
 
+// Face info: face index → { axis, dir }
+const FACE_INFO = [
+    { axis: 1, dir: -1 }, // 0: Yellow (Top, Y-)
+    { axis: 1, dir:  1 }, // 1: Red    (Bottom, Y+)
+    { axis: 0, dir: -1 }, // 2: Green  (Left, X-)
+    { axis: 0, dir:  1 }, // 3: Cyan   (Right, X+)
+    { axis: 2, dir:  1 }, // 4: Pink   (Front, Z+)
+    { axis: 2, dir: -1 }, // 5: Blue   (Back, Z-)
+];
+
 function getStickerColor(cubie, face) {
     const m = cubie.m, p = cubie.p;
-    let faceAxis, faceDir;
-    switch (face) {
-        case 0: if (Math.round(m[1]) !== -1) return null; faceAxis = 1; faceDir = -1; break;
-        case 1: if (Math.round(m[1]) !== 1)  return null; faceAxis = 1; faceDir = 1;  break;
-        case 2: if (Math.round(m[0]) !== -1) return null; faceAxis = 0; faceDir = -1; break;
-        case 3: if (Math.round(m[0]) !== 1)  return null; faceAxis = 0; faceDir = 1;  break;
-        case 4: if (Math.round(m[2]) !== 1)  return null; faceAxis = 2; faceDir = 1;  break;
-        case 5: if (Math.round(m[2]) !== -1) return null; faceAxis = 2; faceDir = -1; break;
-        default: return null;
-    }
+    if (face < 0 || face > 5) return null;
+    const { axis: faceAxis, dir: faceDir } = FACE_INFO[face];
+    if (Math.abs(m[faceAxis] - faceDir * half) > 0.01) return null;
+
     const extreme = faceDir > 0
         ? Math.max(...p.map(v => v[faceAxis]))
         : Math.min(...p.map(v => v[faceAxis]));
@@ -108,47 +124,44 @@ function getStickerColor(cubie, face) {
 
     const vertCoords = _logStickers ? faceVerts.map(i => [...p[i]]) : null;
     if (_logStickers) {
-        console.log(`[getStickerColor] m=[${m.map(v=>Math.round(v))}] face=${face} faceAxis=${faceAxis} faceDir=${faceDir} extreme=${extreme.toFixed(2)} faceVerts=[${faceVerts}]`);
+        console.log(`[getStickerColor] m=[${m.map(v=>v.toFixed(1))}] face=${face} faceAxis=${faceAxis} faceDir=${faceDir} extreme=${extreme.toFixed(2)} faceVerts=[${faceVerts}]`);
         console.log(`  vert coords:`, faceVerts.map((idx,j) => `  idx${idx}=(${vertCoords[j].map(c=>c.toFixed(2))})`).join(''));
     }
 
     const cx = faceVerts.map(i => Math.floor(i / 4));
     if (cx.every(c => c === cx[0])) {
         const result = cx[0] === 1 ? 3 : 2;
-        if (_logStickers) console.log(`  cx=[${cx}] all same → return ${result} (${['Y-top','Y+bot','X-left','X+right','Z+front','Z-back'][result]})`);
+        if (_logStickers) console.log(`  cx=[${cx}] all same → return ${result}`);
         return result;
     }
     const cy = faceVerts.map(i => Math.floor((i % 4) / 2));
     if (cy.every(c => c === cy[0])) {
         const result = cy[0] === 1 ? 1 : 0;
-        if (_logStickers) console.log(`  cx=[${cx}] not uniform, cy=[${cy}] all same → return ${result} (${['Y-top','Y+bot','X-left','X+right','Z+front','Z-back'][result]})`);
+        if (_logStickers) console.log(`  cy=[${cy}] all same → return ${result}`);
         return result;
     }
     const cz = faceVerts.map(i => i % 2);
     if (cz.every(c => c === cz[0])) {
         const result = cz[0] === 1 ? 4 : 5;
-        if (_logStickers) console.log(`  cx=[${cx}] cy=[${cy}] not uniform, cz=[${cz}] all same → return ${result} (${['Y-top','Y+bot','X-left','X+right','Z+front','Z-back'][result]})`);
+        if (_logStickers) console.log(`  cz=[${cz}] all same → return ${result}`);
         return result;
     }
-    if (_logStickers) console.warn(`[getStickerColor] NO CHECK MATCHED! cx=[${cx}] cy=[${cy}] cz=[${cz}]`, { m: [...m], face, faceVerts, vertCoords: faceVerts.map(i => [...p[i]]) });
+    if (_logStickers) console.warn(`[getStickerColor] NO CHECK MATCHED!`, { m: [...m], face, faceVerts });
     return face;
 }
 
 // --- Animation ---
 
-const MOVES = {
-    'u': { axis: 1, layer: -1, dir: -1 },
-    'U': { axis: 1, layer: -1, dir: 1 },
-    'd': { axis: 1, layer: 1,  dir: 1 },
-    'D': { axis: 1, layer: 1,  dir: -1 },
-    'l': { axis: 0, layer: -1, dir: -1 },
-    'L': { axis: 0, layer: -1, dir: 1 },
-    'r': { axis: 0, layer: 1,  dir: 1 },
-    'R': { axis: 0, layer: 1,  dir: -1 },
-    'f': { axis: 2, layer: 1,  dir: 1 },
-    'F': { axis: 2, layer: 1,  dir: -1 },
-    'b': { axis: 2, layer: -1, dir: -1 },
-    'B': { axis: 2, layer: -1, dir: 1 },
+// Base moves: lowercase key → { axis, side, dir }
+// side = which end of the axis (-1 = negative, +1 = positive)
+// dir = rotation direction for standard (non-shifted) move
+const BASE_MOVES = {
+    'u': { axis: 1, side: -1, dir: -1 },
+    'd': { axis: 1, side:  1, dir:  1 },
+    'l': { axis: 0, side: -1, dir: -1 },
+    'r': { axis: 0, side:  1, dir:  1 },
+    'f': { axis: 2, side:  1, dir:  1 },
+    'b': { axis: 2, side: -1, dir: -1 },
 };
 
 let cubies = createCube();
@@ -162,10 +175,13 @@ function queueMove(axis, layer, dir) {
 
 function scramble() {
     let lastAxis = -1;
-    for (let i = 0; i < 15; i++) {
+    const numMoves = N * 7;
+    for (let i = 0; i < numMoves; i++) {
         let axis;
         do { axis = Math.floor(Math.random() * 3); } while (axis === lastAxis);
-        queueMove(axis, Math.random() < 0.5 ? -1 : 1, Math.random() < 0.5 ? 1 : -1);
+        const layerIdx = Math.floor(Math.random() * N);
+        const layer = layerIdx - half;
+        queueMove(axis, layer, Math.random() < 0.5 ? 1 : -1);
         lastAxis = axis;
     }
 }
@@ -191,11 +207,10 @@ function updateAnimation(time) {
                 _logStickers = true;
                 const faceNames = ['Y-top', 'Y+bot', 'X-left', 'X+right', 'Z+front', 'Z-back'];
                 for (const cubie of cubies) {
-                    const pos = cubie.m.map(Math.round);
                     for (let fi = 0; fi < 6; fi++) {
                         const ci = getStickerColor(cubie, fi);
                         if (ci !== null) {
-                            console.log(`  cubie[${pos}] face=${fi}(${faceNames[fi]}) → color=${ci}(${faceNames[ci]})`);
+                            console.log(`  cubie[${cubie.m.map(v=>v.toFixed(1))}] face=${fi}(${faceNames[fi]}) → color=${ci}(${faceNames[ci]})`);
                         }
                     }
                 }
@@ -212,12 +227,11 @@ function updateAnimation(time) {
                             const val = facePs[0][ax];
                             if (facePs.every(pt => Math.abs(pt[ax] - val) < 0.01)) {
                                 const d = val > cubie.m[ax] ? 1 : -1;
-                                if (Math.round(cubie.m[ax]) === d) {
+                                if (Math.abs(cubie.m[ax] - d * half) < 0.01) {
                                     const fi = faceColorIndex(ax, d);
                                     const ci = getStickerColor(cubie, fi);
-                                    const mR = cubie.m.map(Math.round);
-                                    const pos = stickerTo2D(fi, mR);
-                                    console.log(`  cubie[${mR}] face=${fi}(${faceNames[fi]}) pos=(${pos.x.toFixed(1)},${pos.y.toFixed(1)}) color=${ci}(${faceNames[ci]})`);
+                                    const pos = stickerTo2D(fi, cubie.m);
+                                    console.log(`  cubie[${cubie.m.map(v=>v.toFixed(1))}] face=${fi}(${faceNames[fi]}) pos=(${pos.x.toFixed(1)},${pos.y.toFixed(1)}) color=${ci}(${faceNames[ci]})`);
                                 }
                                 break;
                             }
@@ -277,8 +291,8 @@ function stickerTo2D(faceIndex, cubieM) {
     const [rsA, rsB] = otherAxes;
 
     // Ring indices from cubie position along each ring set's axis
-    const ringA = Math.round(cubieM[rsA]) + 1; // maps -1,0,1 → 0,1,2
-    const ringB = Math.round(cubieM[rsB]) + 1;
+    const ringA = Math.round(cubieM[rsA] + half); // maps -(N-1)/2..(N-1)/2 → 0..N-1
+    const ringB = Math.round(cubieM[rsB] + half);
 
     const cA = ringSetCenter(rsA);
     const cB = ringSetCenter(rsB);
@@ -295,7 +309,7 @@ function renderTrefoil(move, progress) {
     ctx2.fillStyle = '#fff';
     ctx2.fillRect(0, 0, W2, H2);
 
-    // Guide circles: 3 ring sets × 3 concentric rings = 9 circles
+    // Guide circles: 3 ring sets × N concentric rings
     ctx2.strokeStyle = '#ddd';
     ctx2.lineWidth = 1;
     for (let axis = 0; axis < 3; axis++) {
@@ -325,7 +339,7 @@ function renderTrefoil(move, progress) {
                 const val = facePs[0][ax];
                 if (facePs.every(pt => Math.abs(pt[ax] - val) < 0.01)) {
                     const d = val > cubie.m[ax] ? 1 : -1;
-                    if (Math.round(cubie.m[ax]) === d) {
+                    if (Math.abs(cubie.m[ax] - d * half) < 0.01) {
                         fi = faceColorIndex(ax, d);
                         stickerAxis = ax;
                         stickerDir = d;
@@ -337,17 +351,19 @@ function renderTrefoil(move, progress) {
 
             const ci = getStickerColor(cubie, fi);
             const color = ci !== null ? COLORS[ci] : INNER_COLOR;
-            const mR = cubie.m.map(Math.round);
-            const startPos = stickerTo2D(fi, mR);
+            const m = cubie.m;
+            const startPos = stickerTo2D(fi, m);
 
             const entry = { x: startPos.x, y: startPos.y, color, fi };
 
             // Arc animation for cubies in the moving layer
-            if (move && mR[move.axis] === move.layer) {
-                const newM = [mR[0], mR[1], mR[2]];
-                newM[planeA] = -mR[planeB] * move.dir;
-                newM[planeB] = mR[planeA] * move.dir;
+            if (move && Math.abs(m[move.axis] - move.layer) < 0.01) {
+                // Simulate post-rotation m[]
+                const newM = [m[0], m[1], m[2]];
+                newM[planeA] = -m[planeB] * move.dir;
+                newM[planeB] = m[planeA] * move.dir;
 
+                // Determine post-rotation face
                 let newFi;
                 if (stickerAxis === move.axis) {
                     newFi = fi;
@@ -362,7 +378,8 @@ function renderTrefoil(move, progress) {
                 if (stickerAxis !== move.axis) {
                     // Arc along the move-axis ring — defer position until majority vote
                     const rc = ringSetCenter(move.axis);
-                    const radius = TREFOIL.ringRadii[move.layer + 1];
+                    const ringIdx = Math.round(move.layer + half);
+                    const radius = TREFOIL.ringRadii[ringIdx];
                     const startAng = Math.atan2(startPos.y - rc.y, startPos.x - rc.x);
                     const endAng = Math.atan2(endPos.y - rc.y, endPos.x - rc.x);
                     let delta = endAng - startAng;
@@ -400,7 +417,7 @@ function renderTrefoil(move, progress) {
     // Draw sticker circles
     for (const s of allStickers) {
         ctx2.beginPath();
-        ctx2.arc(s.x, s.y, STICKER_RADIUS, 0, Math.PI * 2);
+        ctx2.arc(s.x, s.y, stickerRadius, 0, Math.PI * 2);
         ctx2.fillStyle = s.color;
         ctx2.fill();
         ctx2.strokeStyle = 'rgba(0,0,0,0.25)';
@@ -464,10 +481,10 @@ function render(time) {
     const allFaces = [];
 
     for (const cubie of cubies) {
-        let verts = cubie.p.map(p => [p[0] * SPACING, p[1] * SPACING, p[2] * SPACING]);
+        let verts = cubie.p.map(p => [p[0] * spacing, p[1] * spacing, p[2] * spacing]);
 
         // Animate affected cubies
-        if (move && Math.round(cubie.m[move.axis]) === move.layer) {
+        if (move && Math.abs(cubie.m[move.axis] - move.layer) < 0.01) {
             const angle = ease(progress) * (Math.PI / 2) * move.dir;
             verts = verts.map(v => rotatePoint(v, move.axis, angle));
         }
@@ -491,7 +508,7 @@ function render(time) {
                 const v = facePs[0][ax];
                 if (facePs.every(pt => Math.abs(pt[ax] - v) < 0.01)) {
                     const d = v > cubie.m[ax] ? 1 : -1;
-                    if (Math.round(cubie.m[ax]) === d) {
+                    if (Math.abs(cubie.m[ax] - d * half) < 0.01) {
                         const fi = faceColorIndex(ax, d);
                         const ci = getStickerColor(cubie, fi);
                         if (ci !== null) color = COLORS[ci];
@@ -543,14 +560,51 @@ function updateSpeed(delta) {
     if (speedSlider) speedSlider.value = speedToSlider(moveDuration);
 }
 
+const layerDisplay = document.getElementById('layer-display');
+function updateLayerDisplay() {
+    if (layerDisplay) layerDisplay.textContent = `Layer: ${selectedDepth}`;
+}
+updateLayerDisplay();
+
+const sizeInput = document.getElementById('cube-size');
+if (sizeInput) {
+    sizeInput.value = N;
+    sizeInput.addEventListener('change', () => {
+        const newN = Math.max(2, Math.min(10, parseInt(sizeInput.value) || 3));
+        sizeInput.value = newN;
+        N = newN;
+        updateScaling();
+        selectedDepth = 1;
+        updateLayerDisplay();
+        resetCube();
+    });
+}
+
 document.addEventListener('keydown', (e) => {
     if (e.key === ' ') { e.preventDefault(); scramble(); return; }
     if (e.key === 'Escape') { resetCube(); return; }
     if (e.key === '=' || e.key === '+') { updateSpeed(-50); return; }
     if (e.key === '-' || e.key === '_') { updateSpeed(50); return; }
-    const key = e.shiftKey ? e.key.toUpperCase() : e.key.toLowerCase();
-    const move = MOVES[key];
-    if (move) { e.preventDefault(); queueMove(move.axis, move.layer, move.dir); }
+
+    // Number keys 1-9: set layer depth
+    const num = parseInt(e.key);
+    if (num >= 1 && num <= 9) {
+        selectedDepth = Math.min(num, N);
+        updateLayerDisplay();
+        return;
+    }
+
+    // Face moves
+    const baseKey = e.key.toLowerCase();
+    const bm = BASE_MOVES[baseKey];
+    if (bm) {
+        e.preventDefault();
+        const layer = bm.side * (half - (selectedDepth - 1));
+        const dir = e.shiftKey ? -bm.dir : bm.dir;
+        queueMove(bm.axis, layer, dir);
+        selectedDepth = 1;
+        updateLayerDisplay();
+    }
 });
 
 // --- 3D View Mouse Drag ---
@@ -592,14 +646,13 @@ if (DEBUG) {
     console.group('=== INITIAL CUBE STATE ===');
     const faceNamesInit = ['Y-top', 'Y+bot', 'X-left', 'X+right', 'Z+front', 'Z-back'];
     for (const cubie of cubies) {
-        const pos = cubie.m.map(Math.round);
         const stickers = [];
         for (let fi = 0; fi < 6; fi++) {
             const ci = getStickerColor(cubie, fi);
             if (ci !== null) stickers.push(`face=${fi}(${faceNamesInit[fi]})→color=${ci}(${faceNamesInit[ci]})`);
         }
         if (stickers.length > 0) {
-            console.log(`cubie[${pos}]: ${stickers.join(', ')}`);
+            console.log(`cubie[${cubie.m.map(v=>v.toFixed(1))}]: ${stickers.join(', ')}`);
         }
     }
     console.groupEnd();

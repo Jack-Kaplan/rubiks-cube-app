@@ -20,11 +20,14 @@
         <div class="controls">
             <span><kbd>U</kbd><kbd>D</kbd><kbd>L</kbd><kbd>R</kbd><kbd>F</kbd><kbd>B</kbd> Rotate</span>
             <span><kbd>Shift</kbd> Reverse</span>
+            <span><kbd>1</kbd>-<kbd>9</kbd> Layer depth</span>
             <span><kbd>Space</kbd> Scramble</span>
             <span><kbd>Esc</kbd> Reset</span>
             <span><kbd>+</kbd><kbd>-</kbd> Speed</span>
         </div>
         <div class="controls speed-control">
+            <label>Size: <input id="cube-size" type="number" min="2" max="10" value="3" style="width:3em;text-align:center;"></label>
+            <span id="layer-display">Layer: 1</span>
             <span>Slow</span>
             <input id="speed" type="range" min="50" max="1000" step="50" value="750">
             <span>Fast</span>
