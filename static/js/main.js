@@ -106,9 +106,19 @@ const FACE_INFO = [
 ];
 
 // --- Selection (click-to-rotate) ---
-let selected = null; // { cubie, faceIndex, faceAxis }
+// selected stores a position in objective space: { faceIndex, faceAxis, m:[x,y,z], from }
+// After rotations, we look up whichever cubie is currently at m.
+let selected = null;
 let lastRenderedFaces = [];   // 3D hit-test buffer
 let lastRenderedStickers = []; // 2D hit-test buffer
+
+function findCubieAt(m) {
+    return cubies.find(c =>
+        Math.abs(c.m[0] - m[0]) < 0.01 &&
+        Math.abs(c.m[1] - m[1]) < 0.01 &&
+        Math.abs(c.m[2] - m[2]) < 0.01
+    );
+}
 
 // Project a world-space direction to screen-space (ignoring perspective)
 function worldToScreen(dx, dy, dz) {
@@ -449,20 +459,23 @@ function renderTrefoil(move, progress) {
         ctx2.stroke();
     }
 
-    // Highlight selected sticker
+    // Highlight selected sticker (find cubie by position)
     if (selected) {
-        const hit = allStickers.find(s => s.cubie === selected.cubie && s.fi === selected.faceIndex);
-        if (hit) {
-            ctx2.beginPath();
-            ctx2.arc(hit.x, hit.y, stickerRadius + 3, 0, Math.PI * 2);
-            ctx2.strokeStyle = '#fff';
-            ctx2.lineWidth = 4;
-            ctx2.stroke();
-            ctx2.beginPath();
-            ctx2.arc(hit.x, hit.y, stickerRadius + 3, 0, Math.PI * 2);
-            ctx2.strokeStyle = '#000';
-            ctx2.lineWidth = 2;
-            ctx2.stroke();
+        const selCubie = findCubieAt(selected.m);
+        if (selCubie) {
+            const hit = allStickers.find(s => s.cubie === selCubie && s.fi === selected.faceIndex);
+            if (hit) {
+                ctx2.beginPath();
+                ctx2.arc(hit.x, hit.y, stickerRadius + 3, 0, Math.PI * 2);
+                ctx2.strokeStyle = '#fff';
+                ctx2.lineWidth = 4;
+                ctx2.stroke();
+                ctx2.beginPath();
+                ctx2.arc(hit.x, hit.y, stickerRadius + 3, 0, Math.PI * 2);
+                ctx2.strokeStyle = '#000';
+                ctx2.lineWidth = 2;
+                ctx2.stroke();
+            }
         }
     }
 }
@@ -585,20 +598,23 @@ function render(time) {
         ctx.stroke();
     }
 
-    // Highlight selected face
+    // Highlight selected face (find cubie by position)
     if (selected) {
-        const hit = allFaces.find(f => f.cubie === selected.cubie && f.faceIndex === selected.faceIndex);
-        if (hit) {
-            ctx.beginPath();
-            ctx.moveTo(hit.verts[0].x, hit.verts[0].y);
-            for (let i = 1; i < 4; i++) ctx.lineTo(hit.verts[i].x, hit.verts[i].y);
-            ctx.closePath();
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 4;
-            ctx.stroke();
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 2;
-            ctx.stroke();
+        const selCubie = findCubieAt(selected.m);
+        if (selCubie) {
+            const hit = allFaces.find(f => f.cubie === selCubie && f.faceIndex === selected.faceIndex);
+            if (hit) {
+                ctx.beginPath();
+                ctx.moveTo(hit.verts[0].x, hit.verts[0].y);
+                for (let i = 1; i < 4; i++) ctx.lineTo(hit.verts[i].x, hit.verts[i].y);
+                ctx.closePath();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
         }
     }
 
@@ -657,7 +673,9 @@ document.addEventListener('keydown', (e) => {
         else if (e.key === 'ArrowUp')   screenDir = [0, -1];
         else return;
 
-        const m = selected.cubie.m;
+        const selCubie = findCubieAt(selected.m);
+        if (!selCubie) return;
+        const m = selCubie.m;
         const fi = selected.faceIndex;
         const faceAxis = selected.faceAxis;
         const tangentAxes = [0, 1, 2].filter(i => i !== faceAxis);
@@ -701,7 +719,7 @@ document.addEventListener('keydown', (e) => {
             }
         }
         queueMove(bestAxis, m[bestAxis], bestDir);
-        selected = null;
+        // Selection persists at the same objective position
         return;
     }
     if (e.key === '=' || e.key === '+') { updateSpeed(-50); return; }
@@ -765,7 +783,7 @@ canvas.addEventListener('click', (e) => {
         const f = lastRenderedFaces[i];
         if (f.faceIndex < 0) continue; // inner face, not a sticker
         if (pointInQuad(px, py, f.verts)) {
-            selected = { cubie: f.cubie, faceIndex: f.faceIndex, faceAxis: FACE_AXIS[f.faceIndex], from: '3d' };
+            selected = { faceIndex: f.faceIndex, faceAxis: FACE_AXIS[f.faceIndex], m: [...f.cubie.m], from: '3d' };
             return;
         }
     }
@@ -783,7 +801,7 @@ trefoilCanvas.addEventListener('click', (e) => {
         if (d2 < bestDist) { bestDist = d2; best = s; }
     }
     if (best) {
-        selected = { cubie: best.cubie, faceIndex: best.fi, faceAxis: best.faceAxis, from: '2d' };
+        selected = { faceIndex: best.fi, faceAxis: best.faceAxis, m: [...best.cubie.m], from: '2d' };
     } else {
         selected = null;
     }
