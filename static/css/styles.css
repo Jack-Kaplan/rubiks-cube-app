@@ -61,3 +61,13 @@ kbd {
     border-radius: 3px;
     margin-right: 2px;
 }
+
+.speed-control {
+    align-items: center;
+    gap: 8px;
+}
+
+.speed-control input[type="range"] {
+    width: 120px;
+    accent-color: #666;
+}

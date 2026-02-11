@@ -517,14 +517,18 @@ function render(time) {
 // --- Input ---
 
 const speedSlider = document.getElementById('speed');
+const SPEED_MIN = 50, SPEED_MAX = 1000;
+function sliderToSpeed(v) { return SPEED_MIN + SPEED_MAX - v; }
+function speedToSlider(d) { return SPEED_MIN + SPEED_MAX - d; }
+
 if (speedSlider) {
-    speedSlider.value = moveDuration;
-    speedSlider.addEventListener('input', () => { moveDuration = Number(speedSlider.value); });
+    speedSlider.value = speedToSlider(moveDuration);
+    speedSlider.addEventListener('input', () => { moveDuration = sliderToSpeed(Number(speedSlider.value)); });
 }
 
 function updateSpeed(delta) {
-    moveDuration = Math.max(50, Math.min(1000, moveDuration + delta));
-    if (speedSlider) speedSlider.value = moveDuration;
+    moveDuration = Math.max(SPEED_MIN, Math.min(SPEED_MAX, moveDuration + delta));
+    if (speedSlider) speedSlider.value = speedToSlider(moveDuration);
 }
 
 document.addEventListener('keydown', (e) => {
