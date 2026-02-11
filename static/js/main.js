@@ -23,23 +23,26 @@ const DEBUG_2D = false; // set true to enable 2D trefoil sticker logging
 let _logStickers = false;
 
 // --- 2D Trefoil Configuration ---
-// Inner faces (Yellow, Cyan, Pink) meet at cube corner (1,-1,1).
-// Inner faces on rings 0-2, outer faces on rings 2-4 (sharing ring 2).
-// Canvas angles: 0°=right, 90°=down, 270°=up.
+// 3-circle Venn diagram: one ring set per rotation axis.
+// Each ring set has 3 concentric rings (one per layer along that axis).
+// Each face is in 2 ring sets; stickers sit at circle-circle intersection points.
+//
+// Ring sets:
+//   Z-axis ring set: Green(2), Yellow(0), Cyan(3), Red(1)
+//   Y-axis ring set: Blue(5), Cyan(3), Pink(4), Green(2)
+//   X-axis ring set: Red(1), Pink(4), Yellow(0), Blue(5)
+//
+// Overlaps:  Z∩X → Yellow,Red (top)  |  Z∩Y → Green,Cyan (lower-left)  |  X∩Y → Pink,Blue (lower-right)
 const TREFOIL = {
-    radii:   [28, 56, 84, 116, 148, 178],
-    spreads: [35, 22, 16, 13, 10, 8],
-    faces: [
-        //   row = cubie.m[rowAxis] * rowFlip + 1   → {0,1,2}
-        //   col = cubie.m[colAxis] * colFlip        → {-1,0,1}
-        { angle: 270, rings: [0,1,2], rowAxis: 2, rowFlip: -1, colAxis: 0, colFlip:  1 }, // 0 Yellow (inner)
-        { angle: 90,  rings: [3,4,5], rowAxis: 2, rowFlip: -1, colAxis: 0, colFlip: -1 }, // 1 Red    (outer)
-        { angle: 210, rings: [3,4,5], rowAxis: 1, rowFlip:  1, colAxis: 2, colFlip: -1 }, // 2 Green  (outer)
-        { angle: 30,  rings: [0,1,2], rowAxis: 1, rowFlip:  1, colAxis: 2, colFlip:  1 }, // 3 Cyan   (inner)
-        { angle: 150, rings: [0,1,2], rowAxis: 1, rowFlip:  1, colAxis: 0, colFlip:  1 }, // 4 Pink   (inner)
-        { angle: 330, rings: [3,4,5], rowAxis: 1, rowFlip:  1, colAxis: 0, colFlip: -1 }, // 5 Blue   (outer)
-    ]
+    centerDist: 55,            // distance from canvas center to each ring set center
+    ringRadii: [50, 75, 100], // radii for layers -1, 0, +1
+    // Ring set center angles indexed by axis: [X-axis, Y-axis, Z-axis]
+    ringSetAngles: [330, 90, 210],
 };
+// Inner faces (closer to canvas center at intersection points)
+const INNER_FACES = new Set([0, 3, 4]); // Yellow, Cyan, Pink
+// Face axis lookup: face index → its axis
+const FACE_AXIS = [1, 1, 0, 0, 2, 2];
 
 const STICKER_RADIUS = 11;
 
@@ -212,10 +215,9 @@ function updateAnimation(time) {
                                 if (Math.round(cubie.m[ax]) === d) {
                                     const fi = faceColorIndex(ax, d);
                                     const ci = getStickerColor(cubie, fi);
-                                    const tf = TREFOIL.faces[fi];
-                                    const row = Math.round(cubie.m[tf.rowAxis]) * tf.rowFlip + 1;
-                                    const col = Math.round(cubie.m[tf.colAxis]) * tf.colFlip;
-                                    console.log(`  cubie[${cubie.m.map(Math.round)}] face=${fi}(${faceNames[fi]}) row=${row} col=${col} color=${ci}(${faceNames[ci]})`);
+                                    const mR = cubie.m.map(Math.round);
+                                    const pos = stickerTo2D(fi, mR);
+                                    console.log(`  cubie[${mR}] face=${fi}(${faceNames[fi]}) pos=(${pos.x.toFixed(1)},${pos.y.toFixed(1)}) color=${ci}(${faceNames[ci]})`);
                                 }
                                 break;
                             }
@@ -242,17 +244,50 @@ const trefoilCanvas = document.getElementById('trefoil');
 const ctx2 = trefoilCanvas.getContext('2d');
 const CX2 = trefoilCanvas.width / 2, CY2 = trefoilCanvas.height / 2;
 
-function stickerTo2D(fi, row, col) {
-    const face = TREFOIL.faces[fi];
-    const ringIdx = face.rings[row];
-    const r = TREFOIL.radii[ringIdx];
-    const spread = TREFOIL.spreads[ringIdx] * Math.PI / 180;
-    const base = face.angle * Math.PI / 180;
-    const theta = base + col * spread;
+// Compute intersection of two circles; pickInner=true → point closer to canvas center
+function circleIntersection(cx1, cy1, r1, cx2, cy2, r2, pickInner) {
+    const dx = cx2 - cx1, dy = cy2 - cy1;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d < 0.001) return { x: cx1, y: cy1 }; // degenerate
+    const a = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
+    const h = Math.sqrt(Math.max(0, r1 * r1 - a * a));
+    const px = cx1 + a * dx / d, py = cy1 + a * dy / d;
+    const ox = h * dy / d, oy = h * dx / d;
+    const p1 = { x: px + ox, y: py - oy };
+    const p2 = { x: px - ox, y: py + oy };
+    const d1 = (p1.x - CX2) ** 2 + (p1.y - CY2) ** 2;
+    const d2 = (p2.x - CX2) ** 2 + (p2.y - CY2) ** 2;
+    return pickInner ? (d1 < d2 ? p1 : p2) : (d1 < d2 ? p2 : p1);
+}
+
+// Get ring set center for a given axis
+function ringSetCenter(axis) {
+    const ang = TREFOIL.ringSetAngles[axis] * Math.PI / 180;
     return {
-        x: CX2 + r * Math.cos(theta),
-        y: CY2 + r * Math.sin(theta)
+        x: CX2 + TREFOIL.centerDist * Math.cos(ang),
+        y: CY2 + TREFOIL.centerDist * Math.sin(ang)
     };
+}
+
+// Convert face index + cubie position → 2D canvas position
+function stickerTo2D(faceIndex, cubieM) {
+    const faceAxis = FACE_AXIS[faceIndex];
+    // The two ring set axes this face belongs to
+    const otherAxes = [0, 1, 2].filter(a => a !== faceAxis);
+    const [rsA, rsB] = otherAxes;
+
+    // Ring indices from cubie position along each ring set's axis
+    const ringA = Math.round(cubieM[rsA]) + 1; // maps -1,0,1 → 0,1,2
+    const ringB = Math.round(cubieM[rsB]) + 1;
+
+    const cA = ringSetCenter(rsA);
+    const cB = ringSetCenter(rsB);
+
+    return circleIntersection(
+        cA.x, cA.y, TREFOIL.ringRadii[ringA],
+        cB.x, cB.y, TREFOIL.ringRadii[ringB],
+        INNER_FACES.has(faceIndex)
+    );
 }
 
 function renderTrefoil(move, progress) {
@@ -260,13 +295,16 @@ function renderTrefoil(move, progress) {
     ctx2.fillStyle = '#fff';
     ctx2.fillRect(0, 0, W2, H2);
 
-    // Guide circles
+    // Guide circles: 3 ring sets × 3 concentric rings = 9 circles
     ctx2.strokeStyle = '#ddd';
     ctx2.lineWidth = 1;
-    for (const r of TREFOIL.radii) {
-        ctx2.beginPath();
-        ctx2.arc(CX2, CY2, r, 0, Math.PI * 2);
-        ctx2.stroke();
+    for (let axis = 0; axis < 3; axis++) {
+        const c = ringSetCenter(axis);
+        for (const r of TREFOIL.ringRadii) {
+            ctx2.beginPath();
+            ctx2.arc(c.x, c.y, r, 0, Math.PI * 2);
+            ctx2.stroke();
+        }
     }
 
     const t = move ? ease(progress) : 0;
@@ -278,7 +316,7 @@ function renderTrefoil(move, progress) {
         [planeA, planeB] = [0, 1, 2].filter(i => i !== move.axis);
     }
 
-    // Collect stickers using dynamic face detection (same as 3D renderer)
+    // Collect stickers using dynamic face detection
     for (const cubie of cubies) {
         for (const def of FACE_DEFS) {
             const facePs = def.idx.map(i => cubie.p[i]);
@@ -299,18 +337,14 @@ function renderTrefoil(move, progress) {
 
             const ci = getStickerColor(cubie, fi);
             const color = ci !== null ? COLORS[ci] : INNER_COLOR;
-
-            const tf = TREFOIL.faces[fi];
-            const row = Math.round(cubie.m[tf.rowAxis]) * tf.rowFlip + 1;
-            const col = Math.round(cubie.m[tf.colAxis]) * tf.colFlip;
-            const startPos = stickerTo2D(fi, row, col);
+            const mR = cubie.m.map(Math.round);
+            const startPos = stickerTo2D(fi, mR);
 
             let x = startPos.x, y = startPos.y;
 
-            // Smooth lerp animation for cubies in the moving layer
-            if (move && Math.round(cubie.m[move.axis]) === move.layer) {
+            // Arc animation for cubies in the moving layer
+            if (move && mR[move.axis] === move.layer) {
                 // Simulate post-rotation m[]
-                const mR = cubie.m.map(Math.round);
                 const newM = [mR[0], mR[1], mR[2]];
                 newM[planeA] = -mR[planeB] * move.dir;
                 newM[planeB] = mR[planeA] * move.dir;
@@ -318,50 +352,36 @@ function renderTrefoil(move, progress) {
                 // Determine post-rotation face
                 let newFi;
                 if (stickerAxis === move.axis) {
-                    newFi = fi; // stays on same face
+                    newFi = fi;
                 } else if (stickerAxis === planeA) {
                     newFi = faceColorIndex(planeB, stickerDir * move.dir);
                 } else {
                     newFi = faceColorIndex(planeA, -stickerDir * move.dir);
                 }
 
-                const ntf = TREFOIL.faces[newFi];
-                const newRow = newM[ntf.rowAxis] * ntf.rowFlip + 1;
-                const newCol = newM[ntf.colAxis] * ntf.colFlip;
-                const endPos = stickerTo2D(newFi, newRow, newCol);
+                const endPos = stickerTo2D(newFi, newM);
 
-                x = startPos.x + (endPos.x - startPos.x) * t;
-                y = startPos.y + (endPos.y - startPos.y) * t;
+                if (stickerAxis !== move.axis) {
+                    // Sticker is in ring-set-moveAxis → arc along that ring
+                    const rc = ringSetCenter(move.axis);
+                    const radius = TREFOIL.ringRadii[move.layer + 1];
+                    const startAng = Math.atan2(startPos.y - rc.y, startPos.x - rc.x);
+                    const endAng = Math.atan2(endPos.y - rc.y, endPos.x - rc.x);
+                    let delta = endAng - startAng;
+                    while (delta > Math.PI) delta -= 2 * Math.PI;
+                    while (delta < -Math.PI) delta += 2 * Math.PI;
+                    const ang = startAng + delta * t;
+                    x = rc.x + radius * Math.cos(ang);
+                    y = rc.y + radius * Math.sin(ang);
+                } else {
+                    // Face rotating on its own axis — sticker not on move-axis ring
+                    // Use straight-line lerp (stickers stay in same overlap region)
+                    x = startPos.x + (endPos.x - startPos.x) * t;
+                    y = startPos.y + (endPos.y - startPos.y) * t;
+                }
             }
 
-            allStickers.push({ x, y, color, fi, row, col });
-        }
-    }
-
-    // Draw grid lines within each face (non-animated positions)
-    ctx2.strokeStyle = '#ccc';
-    ctx2.lineWidth = 1;
-    const faceGroups = Array.from({ length: 6 }, () => []);
-    for (const s of allStickers) faceGroups[s.fi].push(s);
-
-    for (const stickers of faceGroups) {
-        for (const c of [-1, 0, 1]) {
-            const line = stickers.filter(s => s.col === c).sort((a, b) => a.row - b.row);
-            if (line.length >= 2) {
-                ctx2.beginPath();
-                ctx2.moveTo(line[0].x, line[0].y);
-                for (let i = 1; i < line.length; i++) ctx2.lineTo(line[i].x, line[i].y);
-                ctx2.stroke();
-            }
-        }
-        for (const r of [0, 1, 2]) {
-            const line = stickers.filter(s => s.row === r).sort((a, b) => a.col - b.col);
-            if (line.length >= 2) {
-                ctx2.beginPath();
-                ctx2.moveTo(line[0].x, line[0].y);
-                for (let i = 1; i < line.length; i++) ctx2.lineTo(line[i].x, line[i].y);
-                ctx2.stroke();
-            }
+            allStickers.push({ x, y, color, fi });
         }
     }
 
