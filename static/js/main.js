@@ -21,6 +21,33 @@ const INNER_COLOR = '#222';
 const DEBUG = false; // set true to enable sticker color logging
 let _logStickers = false;
 
+// --- 2D Trefoil Configuration ---
+
+// Each face's position in the radial trefoil layout
+// Inner faces (visible from corner): Yellow, Cyan, Pink
+// Outer lobes (opposite faces): Red, Green, Blue
+const FACE_CONFIG = [
+    { angle: 30,  isOuter: false },  // Face 0: Yellow (inner, lower-right)
+    { angle: 90,  isOuter: true  },  // Face 1: Red    (outer, bottom lobe)
+    { angle: 225, isOuter: true  },  // Face 2: Green  (outer, upper-left lobe)
+    { angle: 270, isOuter: false },  // Face 3: Cyan   (inner, top)
+    { angle: 150, isOuter: false },  // Face 4: Pink   (inner, lower-left)
+    { angle: 315, isOuter: true  },  // Face 5: Blue   (outer, upper-right lobe)
+];
+
+// Maps each face's 3D axes to 2D grid coordinates (u=angular, v=radial)
+// u = cubie.m[uAxis] * uFlip,  v = cubie.m[vAxis] * vFlip
+const FACE_UV = [
+    { uAxis: 0, vAxis: 2, uFlip:  1, vFlip: -1 },  // 0 Yellow Y-: u=+x, v=-z
+    { uAxis: 0, vAxis: 2, uFlip: -1, vFlip:  1 },  // 1 Red Y+:    u=-x, v=+z
+    { uAxis: 2, vAxis: 1, uFlip: -1, vFlip:  1 },  // 2 Green X-:  u=-z, v=+y
+    { uAxis: 2, vAxis: 1, uFlip:  1, vFlip: -1 },  // 3 Cyan X+:   u=+z, v=-y
+    { uAxis: 0, vAxis: 1, uFlip:  1, vFlip:  1 },  // 4 Pink Z+:   u=+x, v=+y
+    { uAxis: 0, vAxis: 1, uFlip: -1, vFlip: -1 },  // 5 Blue Z-:   u=-x, v=-y
+];
+
+const STICKER_RADIUS = 11;
+
 // --- Cube State ---
 
 function createCube() {
@@ -189,6 +216,123 @@ function updateAnimation(time) {
     return { current, progress: Math.min(progress, 1) };
 }
 
+// --- 2D Trefoil Rendering ---
+
+const trefoilCanvas = document.getElementById('trefoil');
+const ctx2 = trefoilCanvas.getContext('2d');
+const CX2 = trefoilCanvas.width / 2, CY2 = trefoilCanvas.height / 2;
+
+// Face detection: which axis and value puts a cubie on this face
+const FACE_DETECT = [
+    { axis: 1, val: -1 },  // 0 Yellow Y-
+    { axis: 1, val:  1 },  // 1 Red Y+
+    { axis: 0, val: -1 },  // 2 Green X-
+    { axis: 0, val:  1 },  // 3 Cyan X+
+    { axis: 2, val:  1 },  // 4 Pink Z+
+    { axis: 2, val: -1 },  // 5 Blue Z-
+];
+
+function stickerTo2D(face, u, v, animAngle) {
+    const cfg = FACE_CONFIG[face];
+    const baseAngle = cfg.angle * Math.PI / 180;
+    const row = v + 1; // 0, 1, 2
+
+    const radii   = cfg.isOuter ? [65, 105, 145] : [28, 55, 85];
+    const spreads = cfg.isOuter ? [24, 19, 14]   : [35, 28, 22];
+
+    const r = radii[row];
+    const theta = baseAngle + u * (spreads[row] * Math.PI / 180) + (animAngle || 0);
+
+    return {
+        x: CX2 + r * Math.cos(theta),
+        y: CY2 + r * Math.sin(theta)
+    };
+}
+
+function renderTrefoil(move, progress) {
+    const W2 = trefoilCanvas.width, H2 = trefoilCanvas.height;
+    ctx2.fillStyle = '#fff';
+    ctx2.fillRect(0, 0, W2, H2);
+
+    // Guide circles
+    const guideRadii = [28, 55, 85, 105, 145];
+    ctx2.strokeStyle = '#ddd';
+    ctx2.lineWidth = 1;
+    for (const r of guideRadii) {
+        ctx2.beginPath();
+        ctx2.arc(CX2, CY2, r, 0, Math.PI * 2);
+        ctx2.stroke();
+    }
+
+    // Collect all sticker positions for grid lines
+    const faceStickers = [];
+
+    for (let fi = 0; fi < 6; fi++) {
+        const det = FACE_DETECT[fi];
+        const uv = FACE_UV[fi];
+        const stickers = [];
+
+        for (const cubie of cubies) {
+            if (Math.round(cubie.m[det.axis]) !== det.val) continue;
+
+            const u = Math.round(cubie.m[uv.uAxis]) * uv.uFlip;
+            const v = Math.round(cubie.m[uv.vAxis]) * uv.vFlip;
+            const ci = getStickerColor(cubie, fi);
+            const color = ci !== null ? COLORS[ci] : INNER_COLOR;
+
+            // Animation offset for affected cubies
+            let animAngle = 0;
+            if (move && Math.round(cubie.m[move.axis]) === move.layer) {
+                animAngle = ease(progress) * (Math.PI / 2) * move.dir * 0.33;
+            }
+
+            const pos = stickerTo2D(fi, u, v, animAngle);
+            stickers.push({ u, v, x: pos.x, y: pos.y, color });
+        }
+
+        faceStickers.push(stickers);
+    }
+
+    // Draw grid lines within each face
+    ctx2.strokeStyle = '#ccc';
+    ctx2.lineWidth = 1;
+    for (const stickers of faceStickers) {
+        // Radial lines: connect stickers with same u across different v
+        for (const uVal of [-1, 0, 1]) {
+            const line = stickers.filter(s => s.u === uVal).sort((a, b) => a.v - b.v);
+            if (line.length >= 2) {
+                ctx2.beginPath();
+                ctx2.moveTo(line[0].x, line[0].y);
+                for (let i = 1; i < line.length; i++) ctx2.lineTo(line[i].x, line[i].y);
+                ctx2.stroke();
+            }
+        }
+        // Arc lines: connect stickers with same v across different u
+        for (const vVal of [-1, 0, 1]) {
+            const line = stickers.filter(s => s.v === vVal).sort((a, b) => a.u - b.u);
+            if (line.length >= 2) {
+                ctx2.beginPath();
+                ctx2.moveTo(line[0].x, line[0].y);
+                for (let i = 1; i < line.length; i++) ctx2.lineTo(line[i].x, line[i].y);
+                ctx2.stroke();
+            }
+        }
+    }
+
+    // Draw sticker circles on top of grid lines
+    for (const stickers of faceStickers) {
+        for (const s of stickers) {
+            ctx2.beginPath();
+            ctx2.arc(s.x, s.y, STICKER_RADIUS, 0, Math.PI * 2);
+            ctx2.fillStyle = s.color;
+            ctx2.fill();
+            ctx2.strokeStyle = 'rgba(0,0,0,0.25)';
+            ctx2.lineWidth = 1.5;
+            ctx2.stroke();
+        }
+    }
+}
+
 // --- 3D Rendering ---
 
 const canvas = document.getElementById('cube');
@@ -196,13 +340,14 @@ const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 const CX = W / 2, CY = H / 2;
 
-function project(x, y, z, time) {
-    const a = time / 4000;
-    const x1 = x * Math.cos(a) - z * Math.sin(a);
-    const z1 = x * Math.sin(a) + z * Math.cos(a);
-    const tilt = -0.7;
-    const y1 = y * Math.cos(tilt) - z1 * Math.sin(tilt);
-    const z2 = y * Math.sin(tilt) + z1 * Math.cos(tilt);
+let viewYaw = 0.6;    // Y-axis rotation (horizontal spin)
+let viewPitch = -0.7;  // X-axis tilt (vertical angle)
+
+function project(x, y, z) {
+    const x1 = x * Math.cos(viewYaw) - z * Math.sin(viewYaw);
+    const z1 = x * Math.sin(viewYaw) + z * Math.cos(viewYaw);
+    const y1 = y * Math.cos(viewPitch) - z1 * Math.sin(viewPitch);
+    const z2 = y * Math.sin(viewPitch) + z1 * Math.cos(viewPitch);
     const s = Math.pow(1.4, z2 / 150);
     return { x: CX + x1 * s, y: CY + y1 * s, z: z2 };
 }
@@ -232,10 +377,14 @@ function faceColorIndex(axis, dir) {
 }
 
 function render(time) {
+    const { current: move, progress } = updateAnimation(time);
+
+    // Draw 2D trefoil view
+    renderTrefoil(move, progress);
+
+    // Draw 3D cube view
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, W, H);
-
-    const { current: move, progress } = updateAnimation(time);
     const allFaces = [];
 
     for (const cubie of cubies) {
@@ -247,7 +396,7 @@ function render(time) {
             verts = verts.map(v => rotatePoint(v, move.axis, angle));
         }
 
-        const proj = verts.map(v => project(v[0], v[1], v[2], time));
+        const proj = verts.map(v => project(v[0], v[1], v[2]));
 
         // Render ALL 6 faces of this cubie
         for (const def of FACE_DEFS) {
@@ -311,7 +460,38 @@ document.addEventListener('keydown', (e) => {
     if (move) { e.preventDefault(); queueMove(move.axis, move.layer, move.dir); }
 });
 
-canvas.addEventListener('click', scramble);
+// --- 3D View Mouse Drag ---
+
+let dragging = false;
+let dragStartX = 0, dragStartY = 0;
+let dragMoved = false;
+
+canvas.addEventListener('mousedown', (e) => {
+    dragging = true;
+    dragMoved = false;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+});
+
+window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - dragStartX;
+    const dy = e.clientY - dragStartY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMoved = true;
+    viewYaw += dx * 0.01;
+    viewPitch += dy * 0.01;
+    viewPitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, viewPitch));
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+});
+
+window.addEventListener('mouseup', () => {
+    dragging = false;
+});
+
+canvas.addEventListener('click', (e) => {
+    // click without drag is intentionally a no-op (use Space to scramble)
+});
 
 // --- Initial state dump ---
 if (DEBUG) {

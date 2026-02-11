@@ -17,6 +17,18 @@ body {
     text-align: center;
 }
 
+.canvases {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.panel {
+    text-align: center;
+}
+
+
 h1 {
     font-size: 1.5rem;
     color: #333;
