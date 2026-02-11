@@ -105,6 +105,27 @@ const FACE_INFO = [
     { axis: 2, dir: -1 }, // 5: Blue   (Back, Z-)
 ];
 
+// --- Selection (click-to-rotate) ---
+let selected = null; // { cubie, faceIndex, faceAxis }
+let lastRenderedFaces = [];   // 3D hit-test buffer
+let lastRenderedStickers = []; // 2D hit-test buffer
+
+// Project a world-space direction to screen-space (ignoring perspective)
+function worldToScreen(dx, dy, dz) {
+    const sx = dx * Math.cos(viewYaw) - dz * Math.sin(viewYaw);
+    const z1 = dx * Math.sin(viewYaw) + dz * Math.cos(viewYaw);
+    const sy = dy * Math.cos(viewPitch) - z1 * Math.sin(viewPitch);
+    return [sx, sy];
+}
+
+function pointInQuad(px, py, quad) {
+    for (let i = 0; i < 4; i++) {
+        const a = quad[i], b = quad[(i + 1) % 4];
+        if ((b.x - a.x) * (py - a.y) - (b.y - a.y) * (px - a.x) < 0) return false;
+    }
+    return true;
+}
+
 function getStickerColor(cubie, face) {
     const m = cubie.m, p = cubie.p;
     if (face < 0 || face > 5) return null;
@@ -354,7 +375,7 @@ function renderTrefoil(move, progress) {
             const m = cubie.m;
             const startPos = stickerTo2D(fi, m);
 
-            const entry = { x: startPos.x, y: startPos.y, color, fi };
+            const entry = { x: startPos.x, y: startPos.y, color, fi, cubie, faceAxis: FACE_AXIS[fi] };
 
             // Arc animation for cubies in the moving layer
             if (move && Math.abs(m[move.axis] - move.layer) < 0.01) {
@@ -414,6 +435,9 @@ function renderTrefoil(move, progress) {
         }
     }
 
+    // Store for hit-testing
+    lastRenderedStickers = allStickers;
+
     // Draw sticker circles
     for (const s of allStickers) {
         ctx2.beginPath();
@@ -423,6 +447,23 @@ function renderTrefoil(move, progress) {
         ctx2.strokeStyle = 'rgba(0,0,0,0.25)';
         ctx2.lineWidth = 1.5;
         ctx2.stroke();
+    }
+
+    // Highlight selected sticker
+    if (selected) {
+        const hit = allStickers.find(s => s.cubie === selected.cubie && s.fi === selected.faceIndex);
+        if (hit) {
+            ctx2.beginPath();
+            ctx2.arc(hit.x, hit.y, stickerRadius + 3, 0, Math.PI * 2);
+            ctx2.strokeStyle = '#fff';
+            ctx2.lineWidth = 4;
+            ctx2.stroke();
+            ctx2.beginPath();
+            ctx2.arc(hit.x, hit.y, stickerRadius + 3, 0, Math.PI * 2);
+            ctx2.strokeStyle = '#000';
+            ctx2.lineWidth = 2;
+            ctx2.stroke();
+        }
     }
 }
 
@@ -503,14 +544,15 @@ function render(time) {
             // Determine actual face axis/dir from current corner positions
             // (FACE_DEFS axis/dir are stale after rotations)
             let color = INNER_COLOR;
+            let faceIndex = -1;
             const facePs = def.idx.map(i => cubie.p[i]);
             for (let ax = 0; ax < 3; ax++) {
                 const v = facePs[0][ax];
                 if (facePs.every(pt => Math.abs(pt[ax] - v) < 0.01)) {
                     const d = v > cubie.m[ax] ? 1 : -1;
                     if (Math.abs(cubie.m[ax] - d * half) < 0.01) {
-                        const fi = faceColorIndex(ax, d);
-                        const ci = getStickerColor(cubie, fi);
+                        faceIndex = faceColorIndex(ax, d);
+                        const ci = getStickerColor(cubie, faceIndex);
                         if (ci !== null) color = COLORS[ci];
                     }
                     break;
@@ -521,12 +563,15 @@ function render(time) {
                 verts: fv,
                 color,
                 depth: (fv[0].z + fv[1].z + fv[2].z + fv[3].z) / 4,
+                cubie,
+                faceIndex,
             });
         }
     }
 
     // Painter's algorithm: draw far faces first
     allFaces.sort((a, b) => a.depth - b.depth);
+    lastRenderedFaces = allFaces;
 
     for (const f of allFaces) {
         ctx.beginPath();
@@ -538,6 +583,23 @@ function render(time) {
         ctx.strokeStyle = '#111';
         ctx.lineWidth = 1;
         ctx.stroke();
+    }
+
+    // Highlight selected face
+    if (selected) {
+        const hit = allFaces.find(f => f.cubie === selected.cubie && f.faceIndex === selected.faceIndex);
+        if (hit) {
+            ctx.beginPath();
+            ctx.moveTo(hit.verts[0].x, hit.verts[0].y);
+            for (let i = 1; i < 4; i++) ctx.lineTo(hit.verts[i].x, hit.verts[i].y);
+            ctx.closePath();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
     }
 
     requestAnimationFrame(render);
@@ -575,6 +637,7 @@ if (sizeInput) {
         N = newN;
         updateScaling();
         selectedDepth = 1;
+        selected = null;
         updateLayerDisplay();
         resetCube();
     });
@@ -582,7 +645,65 @@ if (sizeInput) {
 
 document.addEventListener('keydown', (e) => {
     if (e.key === ' ') { e.preventDefault(); scramble(); return; }
-    if (e.key === 'Escape') { resetCube(); return; }
+    if (e.key === 'Escape') { selected = null; resetCube(); return; }
+
+    // Arrow keys: rotate selected sticker's layer in the visual direction
+    if (selected && e.key.startsWith('Arrow')) {
+        e.preventDefault();
+        let screenDir;
+        if (e.key === 'ArrowRight')     screenDir = [1, 0];
+        else if (e.key === 'ArrowLeft') screenDir = [-1, 0];
+        else if (e.key === 'ArrowDown') screenDir = [0, 1];
+        else if (e.key === 'ArrowUp')   screenDir = [0, -1];
+        else return;
+
+        const m = selected.cubie.m;
+        const fi = selected.faceIndex;
+        const faceAxis = selected.faceAxis;
+        const tangentAxes = [0, 1, 2].filter(i => i !== faceAxis);
+
+        let bestAxis = tangentAxes[0], bestDir = 1, bestDot = -Infinity;
+        for (const rotAxis of tangentAxes) {
+            if (selected.from === '3d') {
+                // 3D: project world-space rotation velocity to screen
+                const [a, b] = [0, 1, 2].filter(i => i !== rotAxis);
+                const vel = [0, 0, 0];
+                vel[a] = -m[b];
+                vel[b] = m[a];
+                const [sx, sy] = worldToScreen(vel[0], vel[1], vel[2]);
+                const dot = sx * screenDir[0] + sy * screenDir[1];
+                if (Math.abs(dot) > bestDot) {
+                    bestDot = Math.abs(dot);
+                    bestAxis = rotAxis;
+                    bestDir = dot > 0 ? 1 : -1;
+                }
+            } else {
+                // 2D: compute trefoil displacement for dir=+1
+                const [planeA, planeB] = [0, 1, 2].filter(i => i !== rotAxis);
+                const newM = [m[0], m[1], m[2]];
+                newM[planeA] = -m[planeB];
+                newM[planeB] = m[planeA];
+                let newFi;
+                if (faceAxis === planeA) {
+                    newFi = faceColorIndex(planeB, FACE_INFO[fi].dir);
+                } else {
+                    newFi = faceColorIndex(planeA, -FACE_INFO[fi].dir);
+                }
+                const startPos = stickerTo2D(fi, m);
+                const endPos = stickerTo2D(newFi, newM);
+                const dx = endPos.x - startPos.x, dy = endPos.y - startPos.y;
+                const dot = dx * screenDir[0] + dy * screenDir[1];
+                if (Math.abs(dot) > bestDot) {
+                    bestDot = Math.abs(dot);
+                    bestAxis = rotAxis;
+                    bestDir = dot > 0 ? 1 : -1;
+                }
+            }
+        }
+        queueMove(bestAxis, m[bestAxis], bestDir);
+        selected = null;
+        return;
+    }
     if (e.key === '=' || e.key === '+') { updateSpeed(-50); return; }
     if (e.key === '-' || e.key === '_') { updateSpeed(50); return; }
 
@@ -635,7 +756,37 @@ window.addEventListener('mouseup', () => {
 });
 
 canvas.addEventListener('click', (e) => {
-    // click without drag is intentionally a no-op (use Space to scramble)
+    if (dragMoved) return;
+    const rect = canvas.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const py = (e.clientY - rect.top) * (canvas.height / rect.height);
+    // Iterate reverse (front-to-back) since sorted far-first
+    for (let i = lastRenderedFaces.length - 1; i >= 0; i--) {
+        const f = lastRenderedFaces[i];
+        if (f.faceIndex < 0) continue; // inner face, not a sticker
+        if (pointInQuad(px, py, f.verts)) {
+            selected = { cubie: f.cubie, faceIndex: f.faceIndex, faceAxis: FACE_AXIS[f.faceIndex], from: '3d' };
+            return;
+        }
+    }
+    selected = null;
+});
+
+trefoilCanvas.addEventListener('click', (e) => {
+    const rect = trefoilCanvas.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (trefoilCanvas.width / rect.width);
+    const py = (e.clientY - rect.top) * (trefoilCanvas.height / rect.height);
+    let best = null, bestDist = stickerRadius * stickerRadius;
+    for (const s of lastRenderedStickers) {
+        const dx = s.x - px, dy = s.y - py;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestDist) { bestDist = d2; best = s; }
+    }
+    if (best) {
+        selected = { cubie: best.cubie, faceIndex: best.fi, faceAxis: best.faceAxis, from: '2d' };
+    } else {
+        selected = null;
+    }
 });
 
 // --- Initial state dump ---
