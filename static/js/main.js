@@ -18,6 +18,36 @@ const CUBIE_SIZE = 0.49; // half-width of each cubie (< 0.5 leaves gaps)
 let moveDuration = 300;
 const INNER_COLOR = '#222';
 
+// --- Image Mode ---
+let faceImages = new Array(6).fill(null);
+let imageMode = false;
+
+function generateTestPattern(faceId) {
+    const size = 256;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const cx = c.getContext('2d');
+    const tile = size / N;
+    for (let u = 0; u < N; u++) {
+        for (let v = 0; v < N; v++) {
+            cx.fillStyle = COLORS[faceId];
+            cx.globalAlpha = 0.4 + 0.6 * ((u + v) / (2 * (N - 1) || 1));
+            cx.fillRect(u * tile, v * tile, tile, tile);
+            cx.globalAlpha = 1;
+            cx.fillStyle = '#000';
+            cx.font = `bold ${tile * 0.35}px sans-serif`;
+            cx.textAlign = 'center';
+            cx.textBaseline = 'middle';
+            cx.fillText(`${u},${v}`, (u + 0.5) * tile, (v + 0.5) * tile);
+        }
+    }
+    return c;
+}
+
+function loadFaceImages() {
+    for (let i = 0; i < 6; i++) faceImages[i] = generateTestPattern(i);
+}
+
 const DEBUG = false;    // set true to enable 3D sticker color logging
 const DEBUG_2D = false; // set true to enable 2D trefoil sticker logging
 let _logStickers = false;
@@ -28,6 +58,7 @@ let half = (N - 1) / 2;
 let spacing = Math.floor(310 / N);
 let stickerRadius = Math.max(4, Math.min(16, Math.floor(48 / N)));
 let selectedDepth = 1;
+let borderWidth = Math.ceil(N / 2); // 1 = void cube, ceil(N/2) = solid
 
 // --- 2D Trefoil Configuration ---
 // 3-circle Venn diagram: one ring set per rotation axis.
@@ -46,6 +77,7 @@ const FACE_AXIS = [1, 1, 0, 0, 2, 2];
 
 function updateScaling() {
     half = (N - 1) / 2;
+    borderWidth = Math.min(borderWidth, Math.ceil(N / 2));
     spacing = Math.floor(310 / N);
     stickerRadius = Math.max(4, Math.min(16, Math.floor(48 / N)));
     // Trefoil ring radii: N evenly spaced values centered around 210
@@ -56,6 +88,33 @@ function updateScaling() {
 }
 updateScaling();
 
+// 8 corners: 0(-,-,-) 1(-,-,+) 2(-,+,-) 3(-,+,+) 4(+,-,-) 5(+,-,+) 6(+,+,-) 7(+,+,+)
+// Winding: outward normals via (v1-v0)x(v2-v0)
+const FACE_DEFS = [
+    { idx: [0, 4, 5, 1], axis: 1, dir: -1 }, // Y- top
+    { idx: [2, 3, 7, 6], axis: 1, dir: 1 },  // Y+ bottom
+    { idx: [0, 1, 3, 2], axis: 0, dir: -1 }, // X- left
+    { idx: [4, 6, 7, 5], axis: 0, dir: 1 },  // X+ right
+    { idx: [1, 5, 7, 3], axis: 2, dir: 1 },  // Z+ front
+    { idx: [0, 2, 6, 4], axis: 2, dir: -1 }, // Z- back
+];
+
+// Maps FACE_DEFS index → [uAxis, vAxis] in 0-indexed grid coords (xi,yi,zi)
+const FACE_UV = [
+    [0, 2], // defIdx 0 (Y- top):   u=xi, v=zi
+    [2, 0], // defIdx 1 (Y+ bot):   u=zi, v=xi
+    [2, 1], // defIdx 2 (X- left):  u=zi, v=yi
+    [1, 2], // defIdx 3 (X+ right): u=yi, v=zi
+    [0, 1], // defIdx 4 (Z+ front): u=xi, v=yi
+    [1, 0], // defIdx 5 (Z- back):  u=yi, v=xi
+];
+
+function faceColorIndex(axis, dir) {
+    if (axis === 1) return dir > 0 ? 1 : 0;
+    if (axis === 0) return dir > 0 ? 3 : 2;
+    return dir > 0 ? 4 : 5;
+}
+
 // --- Cube State ---
 
 function createCube() {
@@ -64,8 +123,19 @@ function createCube() {
     for (let xi = 0; xi < N; xi++) {
         for (let yi = 0; yi < N; yi++) {
             for (let zi = 0; zi < N; zi++) {
-                // Skip interior cubies (not on any outer face)
-                if (xi > 0 && xi < N - 1 && yi > 0 && yi < N - 1 && zi > 0 && zi < N - 1) continue;
+                // Void cube filter: keep cubie if it's in the border of any face it belongs to
+                const coords = [xi, yi, zi];
+                let keep = false;
+                for (let a = 0; a < 3; a++) {
+                    if (coords[a] !== 0 && coords[a] !== N - 1) continue;
+                    const others = [0, 1, 2].filter(i => i !== a);
+                    const d = Math.min(
+                        coords[others[0]], N - 1 - coords[others[0]],
+                        coords[others[1]], N - 1 - coords[others[1]]
+                    );
+                    if (d < borderWidth) { keep = true; break; }
+                }
+                if (!keep) continue;
                 const x = xi - half, y = yi - half, z = zi - half;
                 // 8 corners of this cubie box, ordered: [±S, ±S, ±S]
                 const corners = [];
@@ -73,7 +143,19 @@ function createCube() {
                     for (let cy = -1; cy <= 1; cy += 2)
                         for (let cz = -1; cz <= 1; cz += 2)
                             corners.push([x + cx * S, y + cy * S, z + cz * S]);
-                cubies.push({ m: [x, y, z], p: corners });
+                const stickers = new Array(6).fill(null);
+                for (let defIdx = 0; defIdx < FACE_DEFS.length; defIdx++) {
+                    const def = FACE_DEFS[defIdx];
+                    if ((def.dir === -1 && coords[def.axis] === 0) ||
+                        (def.dir === 1 && coords[def.axis] === N - 1)) {
+                        stickers[defIdx] = {
+                            faceId: faceColorIndex(def.axis, def.dir),
+                            u: coords[FACE_UV[defIdx][0]],
+                            v: coords[FACE_UV[defIdx][1]],
+                        };
+                    }
+                }
+                cubies.push({ m: [x, y, z], p: corners, stickers });
             }
         }
     }
@@ -506,21 +588,28 @@ function rotatePoint([x, y, z], axis, angle) {
     return [x * c - y * s, x * s + y * c, z];
 }
 
-// 8 corners: 0(-,-,-) 1(-,-,+) 2(-,+,-) 3(-,+,+) 4(+,-,-) 5(+,-,+) 6(+,+,-) 7(+,+,+)
-// Winding: outward normals via (v1-v0)x(v2-v0)
-const FACE_DEFS = [
-    { idx: [0, 4, 5, 1], axis: 1, dir: -1 }, // Y- top
-    { idx: [2, 3, 7, 6], axis: 1, dir: 1 },  // Y+ bottom
-    { idx: [0, 1, 3, 2], axis: 0, dir: -1 }, // X- left
-    { idx: [4, 6, 7, 5], axis: 0, dir: 1 },  // X+ right
-    { idx: [1, 5, 7, 3], axis: 2, dir: 1 },  // Z+ front
-    { idx: [0, 2, 6, 4], axis: 2, dir: -1 }, // Z- back
-];
-
-function faceColorIndex(axis, dir) {
-    if (axis === 1) return dir > 0 ? 1 : 0;
-    if (axis === 0) return dir > 0 ? 3 : 2;
-    return dir > 0 ? 4 : 5;
+function drawImageTile(ctx, img, sticker, verts) {
+    const [v0, v1, v2, v3] = verts;
+    const tileW = img.width / N, tileH = img.height / N;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(v0.x, v0.y);
+    ctx.lineTo(v1.x, v1.y);
+    ctx.lineTo(v2.x, v2.y);
+    ctx.lineTo(v3.x, v3.y);
+    ctx.closePath();
+    ctx.clip();
+    // Affine transform: unit square → parallelogram v0,v1,v3
+    ctx.setTransform(
+        v1.x - v0.x, v1.y - v0.y,
+        v3.x - v0.x, v3.y - v0.y,
+        v0.x, v0.y
+    );
+    ctx.drawImage(img,
+        sticker.u * tileW, sticker.v * tileH, tileW, tileH,
+        0, 0, 1, 1
+    );
+    ctx.restore();
 }
 
 function render(time) {
@@ -546,7 +635,8 @@ function render(time) {
         const proj = verts.map(v => project(v[0], v[1], v[2]));
 
         // Render ALL 6 faces of this cubie
-        for (const def of FACE_DEFS) {
+        for (let defIdx = 0; defIdx < FACE_DEFS.length; defIdx++) {
+            const def = FACE_DEFS[defIdx];
             const fv = def.idx.map(i => proj[i]);
 
             // Backface cull
@@ -554,21 +644,19 @@ function render(time) {
                         - (fv[1].y - fv[0].y) * (fv[2].x - fv[0].x);
             if (cross <= 0) continue;
 
-            // Determine actual face axis/dir from current corner positions
-            // (FACE_DEFS axis/dir are stale after rotations)
+            const sticker = cubie.stickers[defIdx];
             let color = INNER_COLOR;
             let faceIndex = -1;
-            const facePs = def.idx.map(i => cubie.p[i]);
-            for (let ax = 0; ax < 3; ax++) {
-                const v = facePs[0][ax];
-                if (facePs.every(pt => Math.abs(pt[ax] - v) < 0.01)) {
-                    const d = v > cubie.m[ax] ? 1 : -1;
-                    if (Math.abs(cubie.m[ax] - d * half) < 0.01) {
-                        faceIndex = faceColorIndex(ax, d);
-                        const ci = getStickerColor(cubie, faceIndex);
-                        if (ci !== null) color = COLORS[ci];
+            if (sticker) {
+                color = COLORS[sticker.faceId];
+                // Detect current world face for click selection
+                const facePs = def.idx.map(i => cubie.p[i]);
+                for (let ax = 0; ax < 3; ax++) {
+                    const v = facePs[0][ax];
+                    if (facePs.every(pt => Math.abs(pt[ax] - v) < 0.01)) {
+                        faceIndex = faceColorIndex(ax, v > cubie.m[ax] ? 1 : -1);
+                        break;
                     }
-                    break;
                 }
             }
 
@@ -578,6 +666,7 @@ function render(time) {
                 depth: (fv[0].z + fv[1].z + fv[2].z + fv[3].z) / 4,
                 cubie,
                 faceIndex,
+                sticker,
             });
         }
     }
@@ -587,12 +676,21 @@ function render(time) {
     lastRenderedFaces = allFaces;
 
     for (const f of allFaces) {
+        if (imageMode && f.sticker && faceImages[f.sticker.faceId]) {
+            drawImageTile(ctx, faceImages[f.sticker.faceId], f.sticker, f.verts);
+        } else {
+            ctx.beginPath();
+            ctx.moveTo(f.verts[0].x, f.verts[0].y);
+            for (let i = 1; i < 4; i++) ctx.lineTo(f.verts[i].x, f.verts[i].y);
+            ctx.closePath();
+            ctx.fillStyle = f.color;
+            ctx.fill();
+        }
+        // Always stroke edges with a fresh path
         ctx.beginPath();
         ctx.moveTo(f.verts[0].x, f.verts[0].y);
         for (let i = 1; i < 4; i++) ctx.lineTo(f.verts[i].x, f.verts[i].y);
         ctx.closePath();
-        ctx.fillStyle = f.color;
-        ctx.fill();
         ctx.strokeStyle = '#111';
         ctx.lineWidth = 1;
         ctx.stroke();
@@ -651,11 +749,40 @@ if (sizeInput) {
         const newN = Math.max(1, Math.min(10, parseInt(sizeInput.value) || 3));
         sizeInput.value = newN;
         N = newN;
+        borderWidth = Math.ceil(newN / 2);
         updateScaling();
         selectedDepth = 1;
         selected = null;
         updateLayerDisplay();
         resetCube();
+        syncBorderUI();
+        if (imageMode) loadFaceImages();
+    });
+}
+
+const borderInput = document.getElementById('border-width');
+function syncBorderUI() {
+    if (borderInput) {
+        borderInput.max = Math.ceil(N / 2);
+        borderInput.value = borderWidth;
+    }
+}
+if (borderInput) {
+    syncBorderUI();
+    borderInput.addEventListener('change', () => {
+        const max = Math.ceil(N / 2);
+        borderWidth = Math.max(1, Math.min(max, parseInt(borderInput.value) || max));
+        borderInput.value = borderWidth;
+        selected = null;
+        resetCube();
+    });
+}
+
+const imageModeInput = document.getElementById('image-mode');
+if (imageModeInput) {
+    imageModeInput.addEventListener('change', () => {
+        imageMode = imageModeInput.checked;
+        if (imageMode && !faceImages[0]) loadFaceImages();
     });
 }
 
