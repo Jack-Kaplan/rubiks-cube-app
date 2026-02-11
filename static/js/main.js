@@ -13,7 +13,7 @@ const COLORS = {
     5: '#0066CC', // Blue   (Back, Z-)
 };
 
-const SPACING = 52;
+const SPACING = 104;
 const CUBIE_SIZE = 0.45; // half-width of each cubie (< 0.5 leaves gaps)
 const MOVE_DURATION = 300;
 const INNER_COLOR = '#222';
@@ -34,17 +34,17 @@ let _logStickers = false;
 //
 // Overlaps:  Z∩X → Yellow,Red (top)  |  Z∩Y → Green,Cyan (lower-left)  |  X∩Y → Pink,Blue (lower-right)
 const TREFOIL = {
-    centerDist: 72,            // distance from canvas center to each ring set center
-    ringRadii: [66, 92, 117], // radii for layers -1, 0, +1
+    centerDist: 136,           // distance from canvas center to each ring set center
+    ringRadii: [180, 210, 240], // radii for layers -1, 0, +1
     // Ring set center angles indexed by axis: [X-axis, Y-axis, Z-axis]
-    ringSetAngles: [330, 90, 210],
+    ringSetAngles: [30, 270, 150],
 };
 // Inner faces (closer to canvas center at intersection points)
 const INNER_FACES = new Set([0, 3, 4]); // Yellow, Cyan, Pink
 // Face axis lookup: face index → its axis
 const FACE_AXIS = [1, 1, 0, 0, 2, 2];
 
-const STICKER_RADIUS = 11;
+const STICKER_RADIUS = 16;
 
 // --- Cube State ---
 
