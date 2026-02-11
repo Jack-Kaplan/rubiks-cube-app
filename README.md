@@ -12,7 +12,10 @@ Based on the viral animation by Japanese artist @jagarikin (Twitter, November 20
 # Install dependencies (requires uv)
 uv sync
 
-# Run the server
+# Run the server (option 1: using run.py)
+python run.py
+
+# Or run the server (option 2: using uvicorn directly)
 uv run uvicorn main:app --reload
 
 # Open in browser
@@ -23,20 +26,27 @@ open http://localhost:8000
 
 | Action | Trigger |
 |--------|---------|
-| Scramble | Click 3D view or press `Space` |
-| Reset | Click 2D view or press `Escape` |
+| Scramble | `Space` |
+| Reset | `Escape` |
 | Rotate Up face | `U` (clockwise) / `Shift+U` (counter) |
 | Rotate Down face | `D` / `Shift+D` |
 | Rotate Left face | `L` / `Shift+L` |
 | Rotate Right face | `R` / `Shift+R` |
 | Rotate Front face | `F` / `Shift+F` |
 | Rotate Back face | `B` / `Shift+B` |
+| Select layer depth | `1`-`9` keys |
+| Rotate sticker | Click sticker + `←`/`→`/`↑`/`↓` |
+| Adjust speed | `+` / `-` keys or slider |
+| Cube size | Size input (1-10) |
+| Border width | Border input (1-2) |
+| Toggle image mode | Image checkbox |
 
 ## Project Structure
 
 ```
 rubiks-cube-app/
 ├── main.py                 # FastAPI server
+├── run.py                  # Simplified server runner
 ├── pyproject.toml          # Python dependencies
 ├── templates/
 │   └── index.html          # Main HTML page
@@ -44,28 +54,24 @@ rubiks-cube-app/
     ├── css/
     │   └── styles.css      # Application styles
     └── js/
-        ├── main.js         # Application entry point
-        ├── constants.js    # Configuration and colors
-        ├── cube-state.js   # Cube state management
-        ├── animation.js    # Animation system
-        ├── renderer-2d.js  # 2D trefoil projection
-        └── renderer-3d.js  # 3D cube rendering
+        └── main.js         # Single-file implementation (cube state, animation, 2D/3D rendering)
 ```
 
 ## Technical Details
 
 - **Framework**: FastAPI (Python) serving static JavaScript modules
-- **Rendering**: HTML5 Canvas 2D API
+- **Rendering**: HTML5 Canvas 2D API for both 2D and 3D views
 - **Animation**: requestAnimationFrame with delta-time updates
+- **Cube Support**: N×N×N cubes (configurable from 1×1×1 to 10×10×10)
 - **Target**: 60 FPS on modern hardware
 
 ## Face Color Mapping
 
-| Face | Color | 2D Position |
-|------|-------|-------------|
-| 0 | Yellow | Lower-right inner |
-| 1 | Red | Bottom outer lobe |
-| 2 | Green | Upper-left outer lobe |
-| 3 | Cyan | Top inner |
-| 4 | Magenta | Lower-left inner |
-| 5 | Blue | Upper-right outer lobe |
+| Face | Color | Direction | 2D Position |
+|------|-------|-----------|-------------|
+| 0 | Yellow (#FFE135) | Top (Y-) | Inner face |
+| 1 | Red (#FF3B30) | Bottom (Y+) | Outer lobe |
+| 2 | Green (#32CD32) | Left (X-) | Outer lobe |
+| 3 | Cyan (#00CFFF) | Right (X+) | Inner face |
+| 4 | Pink (#FF69B4) | Front (Z+) | Inner face |
+| 5 | Blue (#0066CC) | Back (Z-) | Outer lobe |
