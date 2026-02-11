@@ -15,7 +15,7 @@ const COLORS = {
 
 const SPACING = 104;
 const CUBIE_SIZE = 0.45; // half-width of each cubie (< 0.5 leaves gaps)
-const MOVE_DURATION = 300;
+let moveDuration = 300;
 const INNER_COLOR = '#222';
 
 const DEBUG = false;    // set true to enable 3D sticker color logging
@@ -183,7 +183,7 @@ function ease(t) {
 function updateAnimation(time) {
     let progress = 0;
     if (current) {
-        progress = (time - moveStart) / MOVE_DURATION;
+        progress = (time - moveStart) / moveDuration;
         if (progress >= 1) {
             applyRotation(cubies, current.axis, current.layer, current.dir);
             if (DEBUG) {
@@ -516,9 +516,22 @@ function render(time) {
 
 // --- Input ---
 
+const speedSlider = document.getElementById('speed');
+if (speedSlider) {
+    speedSlider.value = moveDuration;
+    speedSlider.addEventListener('input', () => { moveDuration = Number(speedSlider.value); });
+}
+
+function updateSpeed(delta) {
+    moveDuration = Math.max(50, Math.min(1000, moveDuration + delta));
+    if (speedSlider) speedSlider.value = moveDuration;
+}
+
 document.addEventListener('keydown', (e) => {
     if (e.key === ' ') { e.preventDefault(); scramble(); return; }
     if (e.key === 'Escape') { resetCube(); return; }
+    if (e.key === '=' || e.key === '+') { updateSpeed(-50); return; }
+    if (e.key === '-' || e.key === '_') { updateSpeed(50); return; }
     const key = e.shiftKey ? e.key.toUpperCase() : e.key.toLowerCase();
     const move = MOVES[key];
     if (move) { e.preventDefault(); queueMove(move.axis, move.layer, move.dir); }
