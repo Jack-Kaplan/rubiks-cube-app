@@ -165,7 +165,7 @@ function scramble() {
     for (let i = 0; i < 15; i++) {
         let axis;
         do { axis = Math.floor(Math.random() * 3); } while (axis === lastAxis);
-        queueMove(axis, Math.floor(Math.random() * 3) - 1, Math.random() < 0.5 ? 1 : -1);
+        queueMove(axis, Math.random() < 0.5 ? -1 : 1, Math.random() < 0.5 ? 1 : -1);
         lastAxis = axis;
     }
 }
@@ -340,16 +340,14 @@ function renderTrefoil(move, progress) {
             const mR = cubie.m.map(Math.round);
             const startPos = stickerTo2D(fi, mR);
 
-            let x = startPos.x, y = startPos.y;
+            const entry = { x: startPos.x, y: startPos.y, color, fi };
 
             // Arc animation for cubies in the moving layer
             if (move && mR[move.axis] === move.layer) {
-                // Simulate post-rotation m[]
                 const newM = [mR[0], mR[1], mR[2]];
                 newM[planeA] = -mR[planeB] * move.dir;
                 newM[planeB] = mR[planeA] * move.dir;
 
-                // Determine post-rotation face
                 let newFi;
                 if (stickerAxis === move.axis) {
                     newFi = fi;
@@ -362,7 +360,7 @@ function renderTrefoil(move, progress) {
                 const endPos = stickerTo2D(newFi, newM);
 
                 if (stickerAxis !== move.axis) {
-                    // Sticker is in ring-set-moveAxis → arc along that ring
+                    // Arc along the move-axis ring — defer position until majority vote
                     const rc = ringSetCenter(move.axis);
                     const radius = TREFOIL.ringRadii[move.layer + 1];
                     const startAng = Math.atan2(startPos.y - rc.y, startPos.x - rc.x);
@@ -370,18 +368,32 @@ function renderTrefoil(move, progress) {
                     let delta = endAng - startAng;
                     while (delta > Math.PI) delta -= 2 * Math.PI;
                     while (delta < -Math.PI) delta += 2 * Math.PI;
-                    const ang = startAng + delta * t;
-                    x = rc.x + radius * Math.cos(ang);
-                    y = rc.y + radius * Math.sin(ang);
+                    entry.arc = { rc, radius, startAng, delta };
                 } else {
-                    // Face rotating on its own axis — sticker not on move-axis ring
-                    // Use straight-line lerp (stickers stay in same overlap region)
-                    x = startPos.x + (endPos.x - startPos.x) * t;
-                    y = startPos.y + (endPos.y - startPos.y) * t;
+                    // Face rotating on its own axis — straight-line lerp
+                    entry.x = startPos.x + (endPos.x - startPos.x) * t;
+                    entry.y = startPos.y + (endPos.y - startPos.y) * t;
                 }
             }
 
-            allStickers.push({ x, y, color, fi });
+            allStickers.push(entry);
+        }
+    }
+
+    // Majority-vote on arc direction: if most deltas are positive, override
+    // any negative ones (and vice versa) so all stickers sweep the same way.
+    const arcEntries = allStickers.filter(e => e.arc);
+    if (arcEntries.length > 0) {
+        const posCount = arcEntries.filter(e => e.arc.delta > 0).length;
+        const majorityPositive = posCount > arcEntries.length / 2;
+        for (const e of arcEntries) {
+            let d = e.arc.delta;
+            if (majorityPositive && d < 0) d += 2 * Math.PI;
+            else if (!majorityPositive && d > 0) d -= 2 * Math.PI;
+            const ang = e.arc.startAng + d * t;
+            e.x = e.arc.rc.x + e.arc.radius * Math.cos(ang);
+            e.y = e.arc.rc.y + e.arc.radius * Math.sin(ang);
+            delete e.arc;
         }
     }
 
