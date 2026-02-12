@@ -8,19 +8,17 @@ Based on the viral animation by Japanese artist @jagarikin (Twitter, November 20
 
 ## Quick Start
 
+Open `index.html` in your browser, or serve with any static HTTP server:
+
 ```bash
-# Install dependencies (requires uv)
-uv sync
+# Option 1: Python
+python -m http.server 8000
 
-# Run the server (option 1: using run.py)
-python run.py
-
-# Or run the server (option 2: using uvicorn directly)
-uv run uvicorn main:app --reload
-
-# Open in browser
-open http://localhost:8000
+# Option 2: Node.js
+npx http-server
 ```
+
+Then open http://localhost:8000.
 
 ## Controls
 
@@ -45,11 +43,7 @@ open http://localhost:8000
 
 ```
 rubiks-cube-app/
-├── main.py                 # FastAPI server
-├── run.py                  # Simplified server runner
-├── pyproject.toml          # Python dependencies
-├── templates/
-│   └── index.html          # Main HTML page
+├── index.html              # Main HTML page
 └── static/
     ├── css/
     │   └── styles.css      # Application styles
@@ -59,7 +53,6 @@ rubiks-cube-app/
 
 ## Technical Details
 
-- **Framework**: FastAPI (Python) serving static JavaScript modules
 - **Rendering**: HTML5 Canvas 2D API for both 2D and 3D views
 - **Animation**: requestAnimationFrame with delta-time updates
 - **Cube Support**: N×N×N cubes (configurable from 1×1×1 to 10×10×10)
