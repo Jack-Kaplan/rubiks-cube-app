@@ -4,10 +4,12 @@
  */
 import { PuzzleEngine } from './engine/PuzzleEngine.js';
 import { CubePuzzle } from './puzzles/cube/CubePuzzle.js';
+import { PyraminxPuzzle } from './puzzles/pyraminx/PyraminxPuzzle.js';
 
 // Registry of available puzzles
 const PUZZLES = {
     cube: () => new CubePuzzle(),
+    pyraminx: () => new PyraminxPuzzle(),
 };
 
 const canvas3d = document.getElementById('cube');

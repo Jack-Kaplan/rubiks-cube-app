@@ -1,4 +1,4 @@
-import { rotatePoint, project, ease, pointInQuad } from './math.js';
+import { rotatePoint, rotatePointAroundAxis, project, ease, pointInQuad, pointInConvexPolygon } from './math.js';
 
 /**
  * Generic 3D renderer for any puzzle. Uses Canvas 2D with painter's algorithm.
@@ -44,7 +44,11 @@ export class Renderer3D {
             // Animate affected pieces
             if (move && puzzle.isPieceInMove(piece, move)) {
                 const angle = ease(progress) * moveAngle * move.dir;
-                verts = verts.map(v => rotatePoint(v, move.axis, angle));
+                if (Array.isArray(move.axis)) {
+                    verts = verts.map(v => rotatePointAroundAxis(v, move.axis, angle));
+                } else {
+                    verts = verts.map(v => rotatePoint(v, move.axis, angle));
+                }
             }
 
             const proj = verts.map(v => project(v[0], v[1], v[2], this.viewYaw, this.viewPitch, this.CX, this.CY));
@@ -131,7 +135,7 @@ export class Renderer3D {
         for (let i = this.lastRenderedFaces.length - 1; i >= 0; i--) {
             const f = this.lastRenderedFaces[i];
             if (f.faceIndex < 0) continue;
-            if (pointInQuad(px, py, f.verts)) {
+            if (pointInConvexPolygon(px, py, f.verts)) {
                 const faceAxis = faceAxisLookup ? faceAxisLookup[f.faceIndex] : 0;
                 return { faceIndex: f.faceIndex, faceAxis, m: [...f.piece.m], from: '3d' };
             }

@@ -38,6 +38,30 @@ export function pointInQuad(px, py, quad) {
     return true;
 }
 
+/** Rotate a 3D point around an arbitrary unit axis vector by angle (radians). */
+export function rotatePointAroundAxis([x, y, z], [kx, ky, kz], angle) {
+    const c = Math.cos(angle), s = Math.sin(angle), t = 1 - c;
+    const dot = kx * x + ky * y + kz * z;
+    const cx = ky * z - kz * y;
+    const cy = kz * x - kx * z;
+    const cz = kx * y - ky * x;
+    return [
+        x * c + cx * s + kx * dot * t,
+        y * c + cy * s + ky * dot * t,
+        z * c + cz * s + kz * dot * t,
+    ];
+}
+
+/** Check if (px, py) is inside a convex polygon (array of {x, y} points). */
+export function pointInConvexPolygon(px, py, poly) {
+    const n = poly.length;
+    for (let i = 0; i < n; i++) {
+        const a = poly[i], b = poly[(i + 1) % n];
+        if ((b.x - a.x) * (py - a.y) - (b.y - a.y) * (px - a.x) < 0) return false;
+    }
+    return true;
+}
+
 /** Cosine ease-in-out: 0→0, 0.5→0.5, 1→1. */
 export function ease(t) {
     return 0.5 - Math.cos(Math.min(t, 1) * Math.PI) / 2;
