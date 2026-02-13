@@ -1,7 +1,7 @@
 import { PuzzleDefinition } from '../PuzzleDefinition.js';
 import { rotatePointAroundAxis } from '../../engine/math.js';
 import {
-    COLORS, NORMALS, FACES, EDGES, VERTEX_FACES, VERTS,
+    COLORS, NORMALS, FACES, EDGES, VERTEX_FACES,
     FACE_DEFS, FACE_COUNT, VERTS_PER_FACE,
     SHRINK, THICKNESS, LAYER_THRESHOLD,
     dot3, sub3, add3, scale3, lerp3,
@@ -80,8 +80,7 @@ export class MegaminxPuzzle extends PuzzleDefinition {
             // Inner backing face (reversed winding, scaled toward origin)
             const innerIdx = Math.min(stickerFaces.length, 3);
             const base = innerIdx * 5;
-            const firstVerts = stickerFaces[0].verts;
-            const rev = [...firstVerts].reverse();
+            const rev = [...stickerFaces[0].verts].reverse();
             for (let i = 0; i < 5; i++) {
                 const v = rev[Math.min(i, rev.length - 1)];
                 p[base + i] = scale3(lerp3(centroid, v, SHRINK), 1 - THICKNESS);
@@ -96,27 +95,9 @@ export class MegaminxPuzzle extends PuzzleDefinition {
             return { m: centroid, p, stickers };
         };
 
-        // 12 center pieces — thick slabs with full-face backing + side walls
+        // 12 center pieces
         for (let fi = 0; fi < 12; fi++) {
-            const piece = makePiece([{ verts: faceStickers[fi].center, faceId: fi }]);
-            const fullOuter = FACES[fi].map(i => VERTS[i]);
-            const fullInner = fullOuter.map(v => add3(v, scale3(NORMALS[fi], -)));
-
-            // def 1: inner backing (reversed winding)
-            for (let i = 0; i < 5; i++) piece.p[5 + i] = [...fullInner[4 - i]];
-
-            // defs 2-3: degenerate (already set)
-            // defs 4-8: 5 side wall quads connecting outer to inner
-            for (let k = 0; k < 5; k++) {
-                const base = (4 + k) * 5;
-                const k1 = (k + 1) % 5;
-                piece.p[base + 0] = [...fullOuter[k]];
-                piece.p[base + 1] = [...fullOuter[k1]];
-                piece.p[base + 2] = [...fullInner[k1]];
-                piece.p[base + 3] = [...fullInner[k]];
-                piece.p[base + 4] = [...fullOuter[k]]; // degenerate 5th
-            }
-            pieces.push(piece);
+            pieces.push(makePiece([{ verts: faceStickers[fi].center, faceId: fi }]));
         }
 
         // 30 edge pieces

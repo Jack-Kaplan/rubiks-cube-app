@@ -1,6 +1,7 @@
 /**
  * Shared constants for the Megaminx puzzle (dodecahedron).
  */
+import { PIECE_GAP } from '../PuzzleDefinition.js';
 const PHI = (1 + Math.sqrt(5)) / 2;
 const INV_PHI = PHI - 1;
 
@@ -114,7 +115,7 @@ export const VERTS_PER_FACE = 5;
 
 // ── Geometry parameters ─────────────────────────────────
 export const CUT_DEPTH = 0.45;   // fraction of apothem for cut line inset
-export const SHRINK = 0.98;      // shrink toward centroid for gap between pieces
+export const SHRINK = PIECE_GAP;
 export const THICKNESS = 0.35;   // depth of inner backing face (backing at 65%)
 export const LAYER_THRESHOLD = 1.05; // dot product cutoff for isPieceInMove
 

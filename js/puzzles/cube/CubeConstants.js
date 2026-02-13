@@ -2,6 +2,7 @@
  * Shared constants for the Rubik's Cube puzzle.
  * Extracted to avoid circular dependency between CubePuzzle and CubeTrefoilView.
  */
+import { PIECE_GAP } from '../PuzzleDefinition.js';
 
 export const COLORS = {
     0: '#FFE135', // Yellow (Top, Y-)
@@ -12,7 +13,7 @@ export const COLORS = {
     5: '#0066CC', // Blue   (Back, Z-)
 };
 
-export const CUBIE_SIZE = 0.49;
+export const CUBIE_SIZE = 0.5 * PIECE_GAP;
 
 // 8 corners: 0(-,-,-) 1(-,-,+) 2(-,+,-) 3(-,+,+) 4(+,-,-) 5(+,-,+) 6(+,+,-) 7(+,+,+)
 // Winding: outward normals via (v1-v0)x(v2-v0)

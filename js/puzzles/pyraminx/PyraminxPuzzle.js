@@ -1,4 +1,4 @@
-import { PuzzleDefinition } from '../PuzzleDefinition.js';
+import { PuzzleDefinition, PIECE_GAP } from '../PuzzleDefinition.js';
 import { rotatePointAroundAxis } from '../../engine/math.js';
 import {
     COLORS, AXES, FACE_NORMALS,
@@ -60,7 +60,7 @@ export class PyraminxPuzzle extends PuzzleDefinition {
     createPieces(config) {
         const N = config.N;
         const pieces = [];
-        const SHRINK = 0.98;
+        const SHRINK = PIECE_GAP;
 
         // Upright tetrahedra: (a,b,c,d) with a+b+c+d = N-1
         for (let a = 0; a <= N - 1; a++)

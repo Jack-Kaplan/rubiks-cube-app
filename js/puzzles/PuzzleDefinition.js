@@ -1,3 +1,6 @@
+/** Global gap constant: fraction of fill from centroid to vertex (0.999 = 0.1% gap). */
+export const PIECE_GAP = 0.999;
+
 /**
  * Base class defining the interface contract for all puzzle types.
  * Extend this class and override the required methods to create a new puzzle.
