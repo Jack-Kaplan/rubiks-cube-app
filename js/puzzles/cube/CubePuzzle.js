@@ -1,4 +1,5 @@
 import { PuzzleDefinition } from '../PuzzleDefinition.js';
+import { worldToScreen } from '../../engine/math.js';
 import { CubeTrefoilView } from './CubeTrefoilView.js';
 import {
     COLORS, CUBIE_SIZE, FACE_DEFS, FACE_UV, FACE_INFO, FACE_AXIS,
@@ -204,6 +205,30 @@ export class CubePuzzle extends PuzzleDefinition {
 
     create2DView(canvas) {
         return new CubeTrefoilView(canvas, this);
+    }
+
+    // ── Arrow-key move resolution ─────────────────────────────
+
+    resolveArrowMove(piece, faceIndex, screenDir, viewYaw, viewPitch, config) {
+        const m = piece.m;
+        const faceAxis = FACE_AXIS[faceIndex];
+        const tangentAxes = [0, 1, 2].filter(i => i !== faceAxis);
+
+        let bestAxis = tangentAxes[0], bestDir = 1, bestDot = -Infinity;
+        for (const rotAxis of tangentAxes) {
+            const [a, b] = [0, 1, 2].filter(i => i !== rotAxis);
+            const vel = [0, 0, 0];
+            vel[a] = -m[b];
+            vel[b] = m[a];
+            const [sx, sy] = worldToScreen(vel[0], vel[1], vel[2], viewYaw, viewPitch);
+            const dot = sx * screenDir[0] + sy * screenDir[1];
+            if (Math.abs(dot) > bestDot) {
+                bestDot = Math.abs(dot);
+                bestAxis = rotAxis;
+                bestDir = dot > 0 ? 1 : -1;
+            }
+        }
+        return { axis: bestAxis, layer: m[bestAxis], dir: bestDir };
     }
 
     // ── Static accessors for external consumers ──────────────

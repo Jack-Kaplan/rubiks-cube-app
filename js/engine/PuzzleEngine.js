@@ -28,6 +28,11 @@ export class PuzzleEngine {
         this.config = config || { ...puzzle.defaultConfig };
         puzzle.onConfigChange(this.config);
         this.pieces = puzzle.createPieces(this.config);
+
+        // Set puzzle-specific camera orientation
+        const angles = puzzle.defaultViewAngles;
+        this.renderer.viewYaw = angles.yaw;
+        this.renderer.viewPitch = angles.pitch;
         this.animation.clear();
         this.input.selected = null;
         this.input.selectedDepth = 1;

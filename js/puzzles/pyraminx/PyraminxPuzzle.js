@@ -3,7 +3,7 @@ import { rotatePointAroundAxis } from '../../engine/math.js';
 import {
     COLORS, AXES, FACE_NORMALS,
     FACE_DEFS, FACE_COUNT, VERTS_PER_FACE,
-    UPRIGHT_STICKER_SLOT, latticePoint,
+    UPRIGHT_STICKER_SLOT, VERTEX_CYCLES, latticePoint,
 } from './PyraminxConstants.js';
 
 export class PyraminxPuzzle extends PuzzleDefinition {
@@ -16,6 +16,9 @@ export class PyraminxPuzzle extends PuzzleDefinition {
     get faceDefs()     { return FACE_DEFS; }
     get vertsPerFace() { return VERTS_PER_FACE; }
     get moveAngle()    { return (2 * Math.PI) / 3; }
+
+    // ── Camera ──────────────────────────────────────────
+    get defaultViewAngles() { return { yaw: Math.PI / 4, pitch: 1.0 }; }
 
     // ── Configuration ─────────────────────────────────────
     get defaultConfig() {
@@ -35,21 +38,15 @@ export class PyraminxPuzzle extends PuzzleDefinition {
     // ── Moves ─────────────────────────────────────────────
     get baseMoves() {
         return {
-            'u': { vertex: 0, depth: 0, dir: 1 },   // U tip
-            'l': { vertex: 1, depth: 0, dir: 1 },   // L tip
-            'r': { vertex: 2, depth: 0, dir: 1 },   // R tip
-            'b': { vertex: 3, depth: 0, dir: 1 },   // B tip
-            'i': { vertex: 0, depth: -1, dir: 1 },  // U layer
-            'j': { vertex: 1, depth: -1, dir: 1 },  // L layer
-            'k': { vertex: 2, depth: -1, dir: 1 },  // R layer
-            'o': { vertex: 3, depth: -1, dir: 1 },  // B layer
+            'u': { vertex: 0, dir: 1 },   // U vertex
+            'l': { vertex: 1, dir: 1 },   // L vertex
+            'r': { vertex: 2, dir: 1 },   // R vertex
+            'b': { vertex: 3, dir: 1 },   // B vertex
         };
     }
 
     resolveMove(baseMove, reversed, config) {
-        const depth = baseMove.depth === -1
-            ? Math.min(config.selectedDepth || 1, config.N - 1)
-            : baseMove.depth;
+        const depth = Math.min(config.selectedDepth ?? 1, config.N - 2);
         const dir = reversed ? -baseMove.dir : baseMove.dir;
         return {
             vertex: baseMove.vertex,
@@ -163,7 +160,7 @@ export class PyraminxPuzzle extends PuzzleDefinition {
     applyRotation(pieces, move) {
         const { vertex, axis, dir } = move;
         const angle = (2 * Math.PI / 3) * dir;
-        const others = [0, 1, 2, 3].filter(i => i !== vertex);
+        const cycle = VERTEX_CYCLES[vertex];
 
         for (const piece of pieces) {
             if (!this.isPieceInMove(piece, move)) continue;
@@ -174,18 +171,18 @@ export class PyraminxPuzzle extends PuzzleDefinition {
             }
             piece.m = rotatePointAroundAxis(piece.m, axis, angle);
 
-            // Cycle barycentric coords for the 3 non-vertex indices
+            // Cycle barycentric coords using precomputed vertex cycle
             const old = [...piece.bary];
             if (dir === 1) {
-                // +120°: V1->V2->V3->V1 (for vertex 0)
-                piece.bary[others[0]] = old[others[2]];
-                piece.bary[others[1]] = old[others[0]];
-                piece.bary[others[2]] = old[others[1]];
+                // +120°: cycle[0]→cycle[1]→cycle[2]→cycle[0]
+                piece.bary[cycle[1]] = old[cycle[0]];
+                piece.bary[cycle[2]] = old[cycle[1]];
+                piece.bary[cycle[0]] = old[cycle[2]];
             } else {
                 // -120°: reverse cycle
-                piece.bary[others[0]] = old[others[1]];
-                piece.bary[others[1]] = old[others[2]];
-                piece.bary[others[2]] = old[others[0]];
+                piece.bary[cycle[0]] = old[cycle[1]];
+                piece.bary[cycle[1]] = old[cycle[2]];
+                piece.bary[cycle[2]] = old[cycle[0]];
             }
         }
     }
@@ -235,6 +232,16 @@ export class PyraminxPuzzle extends PuzzleDefinition {
             lastVertex = vertex;
         }
         return moves;
+    }
+
+    // ── Piece Lookup ──────────────────────────────────────
+    findPieceAt(pieces, m) {
+        let best = null, bestDist = Infinity;
+        for (const p of pieces) {
+            const d = Math.hypot(p.m[0] - m[0], p.m[1] - m[1], p.m[2] - m[2]);
+            if (d < bestDist) { bestDist = d; best = p; }
+        }
+        return bestDist < 0.5 ? best : null;
     }
 
     get has2DView() { return false; }

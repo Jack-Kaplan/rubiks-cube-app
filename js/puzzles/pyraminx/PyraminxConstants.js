@@ -71,6 +71,17 @@ export const VERTS_PER_FACE = 3;
  */
 export const UPRIGHT_STICKER_SLOT = { 0: 1, 1: 5, 2: 3, 3: 4 };
 
+/**
+ * For +120° rotation around vertex v, the other 3 vertices cycle in this order.
+ * Derived from Rodrigues' rotation formula applied to each AXES[v].
+ */
+export const VERTEX_CYCLES = [
+    [1, 2, 3],  // vertex 0: V1→V2→V3→V1
+    [0, 3, 2],  // vertex 1: V0→V3→V2→V0
+    [0, 1, 3],  // vertex 2: V0→V1→V3→V0
+    [0, 2, 1],  // vertex 3: V0→V2→V1→V0
+];
+
 /** Compute a 3D lattice point from barycentric coordinates (a,b,c,d) at size N. */
 export function latticePoint(a, b, c, d, N) {
     const V = PARENT_VERTS;

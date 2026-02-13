@@ -1,5 +1,3 @@
-import { worldToScreen } from './math.js';
-
 const SPEED_MIN = 50, SPEED_MAX = 1000;
 function sliderToSpeed(v) { return SPEED_MIN + SPEED_MAX - v; }
 function speedToSlider(d) { return SPEED_MIN + SPEED_MAX - d; }
@@ -157,7 +155,7 @@ export class InputManager {
         // Standard controls
         const controls = [
             ['Shift', 'Reverse'],
-            ['1-9', 'Layer depth'],
+            ['0-9', 'Layer depth'],
             ['Space', 'Scramble'],
             ['Esc', 'Reset'],
             ['+/-', 'Speed'],
@@ -233,26 +231,20 @@ export class InputManager {
 
             const selPiece = puzzle.findPieceAt(engine.pieces, this.selected.m);
             if (!selPiece) return;
-            const m = selPiece.m;
-            const fi = this.selected.faceIndex;
-            const faceAxis = this.selected.faceAxis;
-            const tangentAxes = [0, 1, 2].filter(i => i !== faceAxis);
 
-            let bestAxis = tangentAxes[0], bestDir = 1, bestDot = -Infinity;
-            for (const rotAxis of tangentAxes) {
-                if (this.selected.from === '3d') {
-                    const [a, b] = [0, 1, 2].filter(i => i !== rotAxis);
-                    const vel = [0, 0, 0];
-                    vel[a] = -m[b];
-                    vel[b] = m[a];
-                    const [sx, sy] = worldToScreen(vel[0], vel[1], vel[2], engine.renderer.viewYaw, engine.renderer.viewPitch);
-                    const dot = sx * screenDir[0] + sy * screenDir[1];
-                    if (Math.abs(dot) > bestDot) {
-                        bestDot = Math.abs(dot);
-                        bestAxis = rotAxis;
-                        bestDir = dot > 0 ? 1 : -1;
-                    }
-                } else if (engine.view2d) {
+            let move;
+            if (this.selected.from === '3d') {
+                move = puzzle.resolveArrowMove(
+                    selPiece, this.selected.faceIndex, screenDir,
+                    engine.renderer.viewYaw, engine.renderer.viewPitch, config
+                );
+            } else if (engine.view2d) {
+                // 2D view arrow keys (cube trefoil view)
+                const fi = this.selected.faceIndex;
+                const faceAxis = this.selected.faceAxis;
+                const tangentAxes = [0, 1, 2].filter(i => i !== faceAxis);
+                let bestAxis = tangentAxes[0], bestDir = 1, bestDot = -Infinity;
+                for (const rotAxis of tangentAxes) {
                     const disp = engine.view2d.computeArrowDirection(selPiece, fi, rotAxis, config);
                     const dot = disp[0] * screenDir[0] + disp[1] * screenDir[1];
                     if (Math.abs(dot) > bestDot) {
@@ -261,17 +253,18 @@ export class InputManager {
                         bestDir = dot > 0 ? 1 : -1;
                     }
                 }
+                move = { axis: bestAxis, layer: selPiece.m[bestAxis], dir: bestDir };
             }
-            engine.animation.queueMove({ axis: bestAxis, layer: m[bestAxis], dir: bestDir });
+            if (move) engine.animation.queueMove(move);
             return;
         }
 
         if (e.key === '=' || e.key === '+') { this._updateSpeed(-50); return; }
         if (e.key === '-' || e.key === '_') { this._updateSpeed(50); return; }
 
-        // Number keys 1-9: set layer depth
+        // Number keys 0-9: set layer depth
         const num = parseInt(e.key);
-        if (num >= 1 && num <= 9) {
+        if (num >= 0 && num <= 9) {
             const N = config.N || 3;
             this.selectedDepth = Math.min(num, N);
             config.selectedDepth = this.selectedDepth;

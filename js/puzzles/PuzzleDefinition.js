@@ -186,4 +186,21 @@ export class PuzzleDefinition {
      * @param {Object} config
      */
     onConfigChange(config) {}
+
+    // ── Camera ──────────────────────────────────────────────
+
+    /** @returns {{ yaw: number, pitch: number }} Default 3D view angles for this puzzle */
+    get defaultViewAngles() { return { yaw: 0.6, pitch: -0.7 }; }
+
+    /**
+     * Resolve an arrow-key press into a move for this puzzle.
+     * @param {Object} piece - The selected piece
+     * @param {number} faceIndex - Which face is selected
+     * @param {number[]} screenDir - Arrow direction as [dx, dy] in screen space
+     * @param {number} viewYaw
+     * @param {number} viewPitch
+     * @param {Object} config
+     * @returns {Object|null} A move descriptor to queue, or null if not supported
+     */
+    resolveArrowMove(piece, faceIndex, screenDir, viewYaw, viewPitch, config) { return null; }
 }
