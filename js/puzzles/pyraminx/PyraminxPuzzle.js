@@ -60,7 +60,7 @@ export class PyraminxPuzzle extends PuzzleDefinition {
     createPieces(config) {
         const N = config.N;
         const pieces = [];
-        const SHRINK = 0.90;
+        const SHRINK = 0.98;
 
         // Upright tetrahedra: (a,b,c,d) with a+b+c+d = N-1
         for (let a = 0; a <= N - 1; a++)

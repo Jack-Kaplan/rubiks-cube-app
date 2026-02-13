@@ -5,11 +5,13 @@
 import { PuzzleEngine } from './engine/PuzzleEngine.js';
 import { CubePuzzle } from './puzzles/cube/CubePuzzle.js';
 import { PyraminxPuzzle } from './puzzles/pyraminx/PyraminxPuzzle.js';
+import { MegaminxPuzzle } from './puzzles/megaminx/MegaminxPuzzle.js';
 
 // Registry of available puzzles
 const PUZZLES = {
     cube: () => new CubePuzzle(),
     pyraminx: () => new PyraminxPuzzle(),
+    megaminx: () => new MegaminxPuzzle(),
 };
 
 const canvas3d = document.getElementById('cube');
