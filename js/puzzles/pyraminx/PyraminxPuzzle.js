@@ -29,7 +29,7 @@ export class PyraminxPuzzle extends PuzzleDefinition {
     }
 
     onConfigChange(config) {
-        config.spacing = Math.floor(280 / config.N);
+        config.spacing = 140;
     }
 
     // ── Moves ─────────────────────────────────────────────

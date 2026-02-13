@@ -65,8 +65,10 @@ export class CubePuzzle extends PuzzleDefinition {
         config.spacing = Math.floor(310 / config.N);
         config.stickerRadius = Math.max(4, Math.min(16, Math.floor(48 / config.N)));
         config.borderWidth = Math.min(config.borderWidth, Math.ceil(config.N / 2));
-        if (config.imageMode && !this._faceImages) {
-            this._loadFaceImages(config.N);
+        if (config.imageMode) {
+            if (!this._faceImages) this._loadFaceImages(config.N);
+        } else {
+            this._faceImages = null;
         }
     }
 
