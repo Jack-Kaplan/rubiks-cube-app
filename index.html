@@ -3,12 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rubik's Cube</title>
+    <title>Puzzle Visualizer</title>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>Rubik's Cube</h1>
+        <div class="title-row">
+            <h1 id="puzzle-title">Rubik's Cube</h1>
+            <select id="puzzle-select" aria-label="Select puzzle"></select>
+        </div>
         <div class="canvases">
             <div class="panel">
                 <canvas id="trefoil" width="800" height="800"></canvas>
@@ -17,25 +20,19 @@
                 <canvas id="cube" width="800" height="800"></canvas>
             </div>
         </div>
-        <div class="controls">
-            <span><kbd>U</kbd><kbd>D</kbd><kbd>L</kbd><kbd>R</kbd><kbd>F</kbd><kbd>B</kbd> Rotate</span>
-            <span><kbd>Shift</kbd> Reverse</span>
-            <span><kbd>1</kbd>-<kbd>9</kbd> Layer depth</span>
-            <span>Click sticker + <kbd>&larr;</kbd><kbd>&rarr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd></span>
-            <span><kbd>Space</kbd> Scramble</span>
-            <span><kbd>Esc</kbd> Reset</span>
-            <span><kbd>+</kbd><kbd>-</kbd> Speed</span>
+        <div class="controls" id="puzzle-controls">
+            <!-- Dynamically populated by InputManager from puzzle.baseMoves -->
         </div>
         <div class="controls speed-control">
-            <label>Size: <input id="cube-size" type="number" min="1" max="10" value="3" style="width:3em;text-align:center;"></label>
-            <label>Border: <input id="border-width" type="number" min="1" max="2" value="2" style="width:3em;text-align:center;"></label>
-            <label><input id="image-mode" type="checkbox"> Images</label>
+            <div id="puzzle-config">
+                <!-- Dynamically populated by InputManager from puzzle.configParams -->
+            </div>
             <span id="layer-display">Layer: 1</span>
             <span>Slow</span>
             <input id="speed" type="range" min="50" max="1000" step="50" value="750">
             <span>Fast</span>
         </div>
     </div>
-    <script defer src="js/main.js"></script>
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
