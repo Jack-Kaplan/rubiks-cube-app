@@ -1,12 +1,12 @@
 # Puzzle Visualizer
 
-A modular puzzle visualization engine with synchronized 2D and 3D views. Currently ships with a Rubik's Cube, with an architecture designed for adding new platonic solid puzzles (Pyraminx, Megaminx, Skewb, etc.).
+A Rubik's Cube visualization engine with synchronized 2D and 3D views.
 
 ## Features
 
 - **3D Rotating View**: Perspective rendering with mouse-drag rotation
-- **2D Trefoil Projection** (Cube): Jagarikin-style corner-centric layout showing all 54 stickers
-- **N×N×N Support**: Configurable cube size from 1×1×1 to 10×10×10
+- **2D Trefoil Projection**: Jagarikin-style corner-centric layout showing all 54 stickers
+- **N×N×N Support**: Configurable cube size from 1×1×1 to 11×11×11
 - **Smooth Animations**: Cosine-eased move queue at 60 FPS
 - **Click-to-Rotate**: Select any sticker and use arrow keys to rotate its layer
 - **Plugin Architecture**: Add new puzzle types by extending `PuzzleDefinition`
@@ -58,27 +58,6 @@ rubiks-cube-app/
             ├── CubePuzzle.js           # Rubik's Cube implementation
             └── CubeTrefoilView.js      # 2D trefoil rendering (cube-specific)
 ```
-
-## Adding a New Puzzle
-
-1. Create a new directory under `js/puzzles/` (e.g., `js/puzzles/pyraminx/`)
-2. Create a class extending `PuzzleDefinition` and implement the required methods:
-   - **Identity**: `name`, `id`
-   - **Geometry**: `faceCount`, `faceDefs`, `vertsPerFace`, `colors`
-   - **State**: `createPieces(config)`, `applyRotation(pieces, move)`, `getStickerColor(piece, face, config)`
-   - **Moves**: `baseMoves`, `resolveMove(baseMove, reversed, config)`, `generateScramble(config)`
-   - **Rendering**: `getSpacing(config)`, `detectWorldFace(piece, verts, config)`, `moveAngle`
-   - **Config**: `defaultConfig`, `configParams`
-3. Register it in `js/main.js`:
-   ```js
-   import { PyraminxPuzzle } from './puzzles/pyraminx/PyraminxPuzzle.js';
-   const PUZZLES = {
-       cube: () => new CubePuzzle(),
-       pyraminx: () => new PyraminxPuzzle(),
-   };
-   ```
-
-The puzzle selector, config UI, and keyboard help all generate automatically from the definition.
 
 ## Technical Details
 

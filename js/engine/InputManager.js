@@ -1,6 +1,9 @@
 const SPEED_MIN = 50, SPEED_MAX = 1000;
 function sliderToSpeed(v) { return SPEED_MIN + SPEED_MAX - v; }
 function speedToSlider(d) { return SPEED_MIN + SPEED_MAX - d; }
+function resolveMax(param, config) {
+    return typeof param.max === 'function' ? param.max(config) : param.max;
+}
 
 /**
  * Generic input manager. Handles keyboard, mouse drag, click selection,
@@ -103,8 +106,9 @@ export class InputManager {
                 input.checked = config[param.key] || false;
                 input.addEventListener('change', () => {
                     config[param.key] = input.checked;
-                    puzzle.onConfigChange(config);
+                    puzzle.onConfigChange(config, param.key);
                     this.engine.onConfigChange(param.key);
+                    this._syncInputs(puzzle, config);
                 });
                 label.appendChild(input);
                 label.append(` ${param.label}`);
@@ -113,23 +117,36 @@ export class InputManager {
                 input = document.createElement('input');
                 input.type = param.type || 'number';
                 input.min = param.min;
-                input.max = param.max;
+                input.max = resolveMax(param, config);
                 input.value = config[param.key] || param.default;
                 input.style.cssText = 'width:3em;text-align:center;';
                 input.addEventListener('change', () => {
-                    const max = param.key === 'borderWidth' ? Math.ceil(config.N / 2) : param.max;
+                    const max = resolveMax(param, config);
                     config[param.key] = Math.max(param.min, Math.min(max, parseInt(input.value) || param.default));
-                    input.value = config[param.key];
-                    puzzle.onConfigChange(config);
+                    puzzle.onConfigChange(config, param.key);
                     this.selected = null;
                     this.selectedDepth = 1;
                     this._updateLayerDisplay();
                     this.engine.onConfigChange(param.key);
+                    this._syncInputs(puzzle, config);
                 });
                 label.appendChild(input);
             }
             this['_input_' + param.key] = input;
             container.appendChild(label);
+        }
+    }
+
+    _syncInputs(puzzle, config) {
+        for (const param of puzzle.configParams) {
+            const input = this['_input_' + param.key];
+            if (!input) continue;
+            if (param.type === 'checkbox') {
+                input.checked = !!config[param.key];
+            } else {
+                input.max = resolveMax(param, config);
+                input.value = config[param.key];
+            }
         }
     }
 

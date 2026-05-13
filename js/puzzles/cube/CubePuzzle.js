@@ -50,22 +50,30 @@ export class CubePuzzle extends PuzzleDefinition {
     }
 
     get defaultConfig() {
-        return { N: 3, borderWidth: 2, selectedDepth: 1, imageMode: false };
+        return { N: 3, borderWidth: 2, borderSolid: true, selectedDepth: 1, imageMode: false };
     }
 
     get configParams() {
         return [
-            { key: 'N', label: 'Size', type: 'number', min: 1, max: 10, default: 3 },
-            { key: 'borderWidth', label: 'Border', type: 'number', min: 1, max: 5, default: 2 },
+            { key: 'N', label: 'Size', type: 'number', min: 1, max: 11, default: 3 },
+            { key: 'borderWidth', label: 'Border', type: 'number', min: 1, max: (c) => Math.ceil(c.N / 2), default: 2 },
             { key: 'imageMode', label: 'Images', type: 'checkbox', default: false },
         ];
     }
 
-    onConfigChange(config) {
+    onConfigChange(config, changedKey) {
         config.half = (config.N - 1) / 2;
         config.spacing = Math.floor(310 / config.N);
         config.stickerRadius = Math.max(4, Math.min(16, Math.floor(48 / config.N)));
-        config.borderWidth = Math.min(config.borderWidth, Math.ceil(config.N / 2));
+        const maxBorder = Math.ceil(config.N / 2);
+        if (changedKey === 'borderWidth') {
+            // User-driven edit; "set to max" means they want it to stay solid as N changes.
+            config.borderSolid = (config.borderWidth >= maxBorder);
+        } else if (config.borderSolid !== false) {
+            config.borderWidth = maxBorder;
+        } else {
+            config.borderWidth = Math.min(config.borderWidth, maxBorder);
+        }
         if (config.imageMode) {
             if (!this._faceImages) this._loadFaceImages(config.N);
         } else {
@@ -88,15 +96,21 @@ export class CubePuzzle extends PuzzleDefinition {
 
     generateScramble(config) {
         const moves = [];
+        if (config.N < 2) return moves;
+        const baseMoveKeys = Object.keys(this.baseMoves);
+        const scrambleConfig = { ...config };
         let lastAxis = -1;
         const numMoves = config.N * 7;
         for (let i = 0; i < numMoves; i++) {
-            let axis;
-            do { axis = Math.floor(Math.random() * 3); } while (axis === lastAxis);
-            const layerIdx = Math.floor(Math.random() * config.N);
-            const layer = layerIdx - config.half;
-            moves.push({ axis, layer, dir: Math.random() < 0.5 ? 1 : -1 });
-            lastAxis = axis;
+            let bm;
+            do {
+                const key = baseMoveKeys[Math.floor(Math.random() * baseMoveKeys.length)];
+                bm = this.baseMoves[key];
+            } while (bm.axis === lastAxis);
+            scrambleConfig.selectedDepth = 1 + Math.floor(Math.random() * config.N);
+            const reversed = Math.random() < 0.5;
+            moves.push(this.resolveMove(bm, reversed, scrambleConfig));
+            lastAxis = bm.axis;
         }
         return moves;
     }
