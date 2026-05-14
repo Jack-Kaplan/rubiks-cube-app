@@ -381,8 +381,16 @@ export class InputManager {
                 sp.classList.toggle('playing', i === headPos && !!op);
                 sp.classList.toggle('next', i === headPos && idle && i < total);
             });
-            if (hasSequence && headPos < spans.length) {
-                spans[headPos].scrollIntoView({ block: 'nearest', inline: 'center' });
+            // Slide the tape so the head sits at the viewport's center
+            // marker — head stays fixed, tape translates past it.
+            const viewport = this._solverMoves.parentElement;
+            if (viewport) {
+                viewport.hidden = !hasSequence;
+                if (hasSequence && headPos < spans.length) {
+                    const head = spans[headPos];
+                    const tx = viewport.clientWidth / 2 - (head.offsetLeft + head.offsetWidth / 2);
+                    this._solverMoves.style.transform = `translateX(${tx}px)`;
+                }
             }
         }
 

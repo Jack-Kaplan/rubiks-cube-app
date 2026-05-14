@@ -107,16 +107,48 @@ kbd {
     margin-bottom: 0.5rem;
 }
 
+/* Turing-tape strip: a single horizontal row inside a fixed viewport.
+   The strip translates so the head (the .playing or .next move) sits at
+   the viewport's center marker — head stays put, tape slides past. */
+.tape-viewport {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    max-width: 800px;
+    margin: 0.5rem auto 0;
+    padding: 4px 0;
+    background: rgba(0,0,0,0.02);
+    border-top: 1px solid #eee;
+    border-bottom: 1px solid #eee;
+}
+
+/* Vertical guide showing where the head is fixed. */
+.tape-viewport::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: rgba(0,0,0,0.12);
+    transform: translateX(-50%);
+    pointer-events: none;
+    z-index: 1;
+}
+
 #solver-moves {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
+    flex-wrap: nowrap;
     gap: 4px;
     font-family: monospace;
     font-size: 0.85rem;
+    white-space: nowrap;
+    will-change: transform;
+    transition: transform 0.2s ease-out;
 }
 
 .solver-move {
+    flex-shrink: 0;
     padding: 2px 6px;
     background: #e8e8e8;
     border: 1px solid #ccc;
