@@ -115,25 +115,78 @@ export class InputManager {
             const rect = canvas3d.getBoundingClientRect();
             const px = (e.clientX - rect.left) * (canvas3d.width / rect.width);
             const py = (e.clientY - rect.top) * (canvas3d.height / rect.height);
-            if (!this.engine.paintMode.active) return;
             const puzzle = this.engine.puzzle;
             const faceAxisLookup = puzzle.constructor.FACE_AXIS || null;
             const hit = this.engine.renderer.hitTest(px, py, faceAxisLookup);
-            this.engine.paintMode.applyColorAt(hit, this._paintColorId);
+            if (this.engine.paintMode.active) {
+                this.engine.paintMode.applyColorAt(hit, this._paintColorId);
+                return;
+            }
+            this.selected = hit;
         });
 
-        // --- 2D click selection (paint mode only) ---
+        // --- 2D click selection (paint mode + sticker selection for arrows) ---
         if (canvas2d) {
             canvas2d.addEventListener('click', (e) => {
                 if (!this.engine.view2d) return;
-                if (!this.engine.paintMode.active) return;
                 const rect = canvas2d.getBoundingClientRect();
                 const px = (e.clientX - rect.left) * (canvas2d.width / rect.width);
                 const py = (e.clientY - rect.top) * (canvas2d.height / rect.height);
                 const hit = this.engine.view2d.getClickTarget(px, py, this.engine.config);
-                this.engine.paintMode.applyColorAt(hit, this._paintColorId);
+                if (this.engine.paintMode.active) {
+                    this.engine.paintMode.applyColorAt(hit, this._paintColorId);
+                    return;
+                }
+                this.selected = hit || null;
             });
         }
+
+        // --- Arrow-key rotation of the selected sticker's layer ---
+        // The only keyboard handler we keep: a sticker has to be clicked
+        // first (mouse-driven), so this is a hybrid interaction, not a
+        // standalone shortcut.
+        document.addEventListener('keydown', (e) => this._onArrowKey(e));
+    }
+
+    _onArrowKey(e) {
+        if (!this.selected || !e.key.startsWith('Arrow')) return;
+        e.preventDefault();
+        const engine = this.engine;
+        const puzzle = engine.puzzle;
+        const config = engine.config;
+        let screenDir;
+        if      (e.key === 'ArrowRight') screenDir = [1, 0];
+        else if (e.key === 'ArrowLeft')  screenDir = [-1, 0];
+        else if (e.key === 'ArrowDown')  screenDir = [0, 1];
+        else if (e.key === 'ArrowUp')    screenDir = [0, -1];
+        else return;
+
+        const selPiece = puzzle.findPieceAt(engine.pieces, this.selected.m);
+        if (!selPiece) return;
+
+        let move;
+        if (this.selected.from === '3d') {
+            move = puzzle.resolveArrowMove(
+                selPiece, this.selected.faceIndex, screenDir,
+                engine.renderer.viewYaw, engine.renderer.viewPitch, config
+            );
+        } else if (engine.view2d) {
+            const fi = this.selected.faceIndex;
+            const faceAxis = this.selected.faceAxis;
+            const tangentAxes = [0, 1, 2].filter(i => i !== faceAxis);
+            let bestAxis = tangentAxes[0], bestDir = 1, bestDot = -Infinity;
+            for (const rotAxis of tangentAxes) {
+                const disp = engine.view2d.computeArrowDirection(selPiece, fi, rotAxis, config);
+                const dot = disp[0] * screenDir[0] + disp[1] * screenDir[1];
+                if (Math.abs(dot) > bestDot) {
+                    bestDot = Math.abs(dot);
+                    bestAxis = rotAxis;
+                    bestDir = dot > 0 ? 1 : -1;
+                }
+            }
+            move = { axis: bestAxis, layer: selPiece.m[bestAxis], dir: bestDir };
+        }
+        if (move) engine.animation.queueMove(move);
     }
 
     _onReset() {
