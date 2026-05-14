@@ -16,13 +16,11 @@ function resolveMax(param, config) {
 export class InputManager {
     constructor(engine) {
         this.engine = engine;
-        this.selected = null;
-        this.selectedDepth = 1;
+        this.selected = null;  // kept for Renderer3D compatibility; never set
         this.dragging = false;
         this.dragStartX = 0;
         this.dragStartY = 0;
         this.dragMoved = false;
-        this._boundKeyDown = null;
     }
 
     bind(canvas3d, canvas2d) {
@@ -36,23 +34,25 @@ export class InputManager {
         }
         this._speedSlider = speedSlider;
 
-        // --- Layer display ---
-        this._layerDisplay = document.getElementById('layer-display');
-        this._updateLayerDisplay();
-
         // --- Solver status / move list ---
         this._solverStatus = document.getElementById('solver-status');
         this._solverMoves = document.getElementById('solver-moves');
-        this._solveBtn = document.getElementById('solve-btn');
-        this._gotoBtn  = document.getElementById('goto-btn');
-        this._stepNext = document.getElementById('step-next');
-        this._stepPrev = document.getElementById('step-prev');
-        this._stepAll  = document.getElementById('step-all');
-        if (this._solveBtn) this._solveBtn.addEventListener('click', () => this.engine.solve());
-        if (this._gotoBtn)  this._gotoBtn.addEventListener('click', () => this.engine.goToState());
-        if (this._stepNext) this._stepNext.addEventListener('click', () => this.engine.playNext());
-        if (this._stepPrev) this._stepPrev.addEventListener('click', () => this.engine.playPrev());
-        if (this._stepAll)  this._stepAll.addEventListener('click', () => this.engine.playAll());
+        this._scrambleBtn = document.getElementById('scramble-btn');
+        this._resetBtn    = document.getElementById('reset-btn');
+        this._solveBtn    = document.getElementById('solve-btn');
+        this._gotoBtn     = document.getElementById('goto-btn');
+        this._stepPrev    = document.getElementById('step-prev');
+        this._stepRevAll  = document.getElementById('step-rev-all');
+        this._stepNext    = document.getElementById('step-next');
+        this._stepAll     = document.getElementById('step-all');
+        if (this._scrambleBtn) this._scrambleBtn.addEventListener('click', () => this.engine.scramble());
+        if (this._resetBtn)    this._resetBtn.addEventListener('click', () => this._onReset());
+        if (this._solveBtn)    this._solveBtn.addEventListener('click', () => this.engine.solve());
+        if (this._gotoBtn)     this._gotoBtn.addEventListener('click', () => this.engine.goToState());
+        if (this._stepPrev)    this._stepPrev.addEventListener('click', () => this.engine.playPrev());
+        if (this._stepRevAll)  this._stepRevAll.addEventListener('click', () => this.engine.reverseAll());
+        if (this._stepNext)    this._stepNext.addEventListener('click', () => this.engine.playNext());
+        if (this._stepAll)     this._stepAll.addEventListener('click', () => this.engine.playAll());
         this.updateStepUI();
 
         // --- Patterns panel ---
@@ -87,10 +87,6 @@ export class InputManager {
             this._patternGo.addEventListener('click', () => this._onPatternGo());
         }
 
-        // --- Keyboard ---
-        this._boundKeyDown = (e) => this._onKeyDown(e);
-        document.addEventListener('keydown', this._boundKeyDown);
-
         // --- 3D mouse drag ---
         canvas3d.addEventListener('mousedown', (e) => {
             this.dragging = true;
@@ -119,31 +115,35 @@ export class InputManager {
             const rect = canvas3d.getBoundingClientRect();
             const px = (e.clientX - rect.left) * (canvas3d.width / rect.width);
             const py = (e.clientY - rect.top) * (canvas3d.height / rect.height);
+            if (!this.engine.paintMode.active) return;
             const puzzle = this.engine.puzzle;
             const faceAxisLookup = puzzle.constructor.FACE_AXIS || null;
             const hit = this.engine.renderer.hitTest(px, py, faceAxisLookup);
-            if (this.engine.paintMode.active) {
-                this.engine.paintMode.applyColorAt(hit, this._paintColorId);
-                return;
-            }
-            this.selected = hit;
+            this.engine.paintMode.applyColorAt(hit, this._paintColorId);
         });
 
-        // --- 2D click selection ---
+        // --- 2D click selection (paint mode only) ---
         if (canvas2d) {
             canvas2d.addEventListener('click', (e) => {
                 if (!this.engine.view2d) return;
+                if (!this.engine.paintMode.active) return;
                 const rect = canvas2d.getBoundingClientRect();
                 const px = (e.clientX - rect.left) * (canvas2d.width / rect.width);
                 const py = (e.clientY - rect.top) * (canvas2d.height / rect.height);
                 const hit = this.engine.view2d.getClickTarget(px, py, this.engine.config);
-                if (this.engine.paintMode.active) {
-                    this.engine.paintMode.applyColorAt(hit, this._paintColorId);
-                    return;
-                }
-                this.selected = hit || null;
+                this.engine.paintMode.applyColorAt(hit, this._paintColorId);
             });
         }
+    }
+
+    _onReset() {
+        const engine = this.engine;
+        engine.paintMode.exit();
+        this._updatePaintToggleUI();
+        engine.reset();
+        engine.clearPending();
+        this.setSolverStatus('');
+        this.clearSolverMoves();
     }
 
     _refreshPatternOptions() {
@@ -282,8 +282,6 @@ export class InputManager {
                     config[param.key] = Math.max(param.min, Math.min(max, parseInt(input.value) || param.default));
                     puzzle.onConfigChange(config, param.key);
                     this.selected = null;
-                    this.selectedDepth = 1;
-                    this._updateLayerDisplay();
                     this.engine.onConfigChange(param.key);
                     this._syncInputs(puzzle, config);
                 });
@@ -305,78 +303,6 @@ export class InputManager {
                 input.value = config[param.key];
             }
         }
-    }
-
-    /**
-     * Set up the keyboard shortcuts display based on puzzle.baseMoves.
-     */
-    setupControlsDisplay(puzzle) {
-        const container = document.getElementById('puzzle-controls');
-        if (!container) return;
-        container.innerHTML = '';
-
-        // Face move keys
-        const keys = Object.keys(puzzle.baseMoves).map(k => k.toUpperCase());
-        const moveSpan = document.createElement('span');
-        keys.forEach(k => {
-            const kbd = document.createElement('kbd');
-            kbd.textContent = k;
-            moveSpan.appendChild(kbd);
-        });
-        moveSpan.append(' Rotate');
-        container.appendChild(moveSpan);
-
-        // Standard controls (solver actions and speed live in the on-screen
-        // panels — Solve, Path, Next, Back, Play all buttons + speed slider).
-        const controls = [
-            ['Shift', 'Reverse'],
-            ['0-9', 'Layer depth'],
-            ['Space', 'Scramble'],
-            ['Esc', 'Reset'],
-        ];
-        for (const [key, desc] of controls) {
-            const span = document.createElement('span');
-            if (key.includes('-') && key.length > 2) {
-                // Range like "1-9"
-                const parts = key.split('-');
-                const kbd1 = document.createElement('kbd');
-                kbd1.textContent = parts[0];
-                span.appendChild(kbd1);
-                span.append('-');
-                const kbd2 = document.createElement('kbd');
-                kbd2.textContent = parts[1];
-                span.appendChild(kbd2);
-            } else if (key.includes('/')) {
-                // Multiple keys like "+/-"
-                const parts = key.split('/');
-                parts.forEach((k, i) => {
-                    if (i > 0) span.append('/');
-                    const kbd = document.createElement('kbd');
-                    kbd.textContent = k;
-                    span.appendChild(kbd);
-                });
-            } else {
-                const kbd = document.createElement('kbd');
-                kbd.textContent = key;
-                span.appendChild(kbd);
-            }
-            span.append(` ${desc}`);
-            container.appendChild(span);
-        }
-
-        // Click + arrow keys
-        const clickSpan = document.createElement('span');
-        clickSpan.textContent = 'Click sticker + ';
-        for (const arrow of ['\u2190', '\u2192', '\u2191', '\u2193']) {
-            const kbd = document.createElement('kbd');
-            kbd.textContent = arrow;
-            clickSpan.appendChild(kbd);
-        }
-        container.appendChild(clickSpan);
-    }
-
-    _updateLayerDisplay() {
-        if (this._layerDisplay) this._layerDisplay.textContent = `Layer: ${this.selectedDepth}`;
     }
 
     setSolverStatus(text) {
@@ -434,8 +360,19 @@ export class InputManager {
             this._stepAll.hidden = !showStepRow;
             this._stepAll.disabled = !(idle && moreAhead);
         }
-        if (this._solveBtn) this._solveBtn.disabled = !idle;
-        if (this._gotoBtn)  this._gotoBtn.disabled  = !idle;
+        if (this._stepRevAll) {
+            this._stepRevAll.hidden = !showStepRow;
+            this._stepRevAll.disabled = !(idle && canBack);
+        }
+        // Animation-aware enable: Scramble/Reset/Solve/Path lock while
+        // anything is in flight (step ops or a scramble draining through
+        // the animation queue).
+        const animating = !!eng.animation.current || eng.animation.queue.length > 0;
+        const busy = !idle || animating || eng._solving;
+        if (this._scrambleBtn) this._scrambleBtn.disabled = busy;
+        if (this._resetBtn)    this._resetBtn.disabled    = !!eng._solving;
+        if (this._solveBtn)    this._solveBtn.disabled    = busy;
+        if (this._gotoBtn)     this._gotoBtn.disabled     = busy;
 
         if (this._solverMoves) {
             const spans = this._solverMoves.querySelectorAll('.solver-move');
@@ -463,82 +400,4 @@ export class InputManager {
         }
     }
 
-    _onKeyDown(e) {
-        const engine = this.engine;
-        const puzzle = engine.puzzle;
-        const config = engine.config;
-
-        if (e.key === ' ') { e.preventDefault(); engine.scramble(); return; }
-        if (e.key === 'Escape') {
-            this.selected = null;
-            engine.paintMode.exit();
-            this._updatePaintToggleUI();
-            engine.reset();
-            engine.clearPending();
-            this.setSolverStatus('');
-            this.clearSolverMoves();
-            return;
-        }
-
-        // Arrow keys: rotate selected sticker's layer
-        if (this.selected && e.key.startsWith('Arrow')) {
-            e.preventDefault();
-            let screenDir;
-            if (e.key === 'ArrowRight')     screenDir = [1, 0];
-            else if (e.key === 'ArrowLeft') screenDir = [-1, 0];
-            else if (e.key === 'ArrowDown') screenDir = [0, 1];
-            else if (e.key === 'ArrowUp')   screenDir = [0, -1];
-            else return;
-
-            const selPiece = puzzle.findPieceAt(engine.pieces, this.selected.m);
-            if (!selPiece) return;
-
-            let move;
-            if (this.selected.from === '3d') {
-                move = puzzle.resolveArrowMove(
-                    selPiece, this.selected.faceIndex, screenDir,
-                    engine.renderer.viewYaw, engine.renderer.viewPitch, config
-                );
-            } else if (engine.view2d) {
-                // 2D view arrow keys (cube trefoil view)
-                const fi = this.selected.faceIndex;
-                const faceAxis = this.selected.faceAxis;
-                const tangentAxes = [0, 1, 2].filter(i => i !== faceAxis);
-                let bestAxis = tangentAxes[0], bestDir = 1, bestDot = -Infinity;
-                for (const rotAxis of tangentAxes) {
-                    const disp = engine.view2d.computeArrowDirection(selPiece, fi, rotAxis, config);
-                    const dot = disp[0] * screenDir[0] + disp[1] * screenDir[1];
-                    if (Math.abs(dot) > bestDot) {
-                        bestDot = Math.abs(dot);
-                        bestAxis = rotAxis;
-                        bestDir = dot > 0 ? 1 : -1;
-                    }
-                }
-                move = { axis: bestAxis, layer: selPiece.m[bestAxis], dir: bestDir };
-            }
-            if (move) engine.animation.queueMove(move);
-            return;
-        }
-
-
-        // Number keys 0-9: set layer depth
-        const num = parseInt(e.key);
-        if (num >= 0 && num <= 9) {
-            const N = config.N || 3;
-            this.selectedDepth = Math.min(num, N);
-            config.selectedDepth = this.selectedDepth;
-            this._updateLayerDisplay();
-            return;
-        }
-
-        // Face moves via puzzle.baseMoves
-        const baseKey = e.key.toLowerCase();
-        const bm = puzzle.baseMoves[baseKey];
-        if (bm) {
-            e.preventDefault();
-            config.selectedDepth = this.selectedDepth;
-            const move = puzzle.resolveMove(bm, e.shiftKey, config);
-            engine.animation.queueMove(move);
-        }
-    }
 }

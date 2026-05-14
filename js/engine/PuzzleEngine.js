@@ -55,8 +55,6 @@ export class PuzzleEngine {
         this.renderer.viewPitch = angles.pitch;
         this.animation.clear();
         this.input.selected = null;
-        this.input.selectedDepth = 1;
-        this.config.selectedDepth = 1;
 
         // 2D view
         if (puzzle.has2DView && this.canvas2d) {
@@ -70,7 +68,6 @@ export class PuzzleEngine {
 
         // Set up dynamic UI
         this.input.setupConfigUI(puzzle, this.config);
-        this.input.setupControlsDisplay(puzzle);
 
         // Update page title
         const titleEl = document.getElementById('puzzle-title');
@@ -92,8 +89,6 @@ export class PuzzleEngine {
             this.pieces = puzzle.createPieces(config);
             this.animation.clear();
             this.input.selected = null;
-            this.input.selectedDepth = 1;
-            config.selectedDepth = 1;
             this.paintMode.exit();
             this.clearPending();
             this.input._refreshPatternOptions?.();
@@ -239,7 +234,18 @@ export class PuzzleEngine {
      */
     playAll() {
         this._autoPlay = true;
+        this._autoReverse = false;
         if (!this._currentOp && this.pendingTokens.length > 0) this.playNext();
+    }
+
+    /**
+     * Mirror of playAll: undo the played tokens one at a time until the
+     * head returns to the start of the tape.
+     */
+    reverseAll() {
+        this._autoReverse = true;
+        this._autoPlay = false;
+        if (!this._currentOp && this.playedCount > 0) this.playPrev();
     }
 
     /**
@@ -275,6 +281,7 @@ export class PuzzleEngine {
         this.playedCount = 0;
         this._currentOp = null;
         this._autoPlay = false;
+        this._autoReverse = false;
         this._lastCompletedCount = this.animation.completedCount;
         this.input?.updateStepUI?.();
     }
@@ -303,8 +310,11 @@ export class PuzzleEngine {
         this.input?.updateStepUI?.();
         if (this._autoPlay && this.pendingTokens.length > 0) {
             this.playNext();
-        } else if (this.pendingTokens.length === 0) {
+        } else if (this._autoReverse && this.playedCount > 0) {
+            this.playPrev();
+        } else {
             this._autoPlay = false;
+            this._autoReverse = false;
         }
     }
 
