@@ -87,6 +87,20 @@ export class InputManager {
             this._patternGo.addEventListener('click', () => this._onPatternGo());
         }
 
+        // --- 2D view toggle ---
+        // Hidden by default; user expands via the title-row button.
+        this._toggle2d = document.getElementById('toggle-2d');
+        this._panel2d  = document.getElementById('trefoil-panel');
+        if (this._panel2d) this._panel2d.style.display = 'none';
+        if (this._toggle2d && this._panel2d) {
+            this._toggle2d.addEventListener('click', () => {
+                const showing = this._panel2d.style.display !== 'none';
+                this._panel2d.style.display = showing ? 'none' : '';
+                this._toggle2d.textContent  = showing ? 'Show 2D ▾' : 'Hide 2D ▴';
+                this._toggle2d.classList.toggle('active', !showing);
+            });
+        }
+
         // --- 3D mouse drag ---
         canvas3d.addEventListener('mousedown', (e) => {
             this.dragging = true;

@@ -37,6 +37,19 @@ body {
     margin-bottom: 1rem;
 }
 
+#toggle-2d {
+    font: inherit;
+    font-size: 0.8rem;
+    padding: 3px 10px;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    background: #fff;
+    cursor: pointer;
+    color: #444;
+}
+#toggle-2d:hover { border-color: #999; }
+#toggle-2d.active { background: #444; color: #fff; border-color: #444; }
+
 h1 {
     font-size: 1.5rem;
     color: #333;
