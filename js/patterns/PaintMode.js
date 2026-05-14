@@ -34,15 +34,15 @@ export class PaintMode {
     }
 
     /**
+     * Paint the sticker at `hit` with the given face color id (0..5).
      * Called from the InputManager's 3D/2D click handlers when paint mode
-     * is active. `hit` has shape `{ faceIndex, faceAxis, m, from }` —
-     * the same as the existing select-sticker path.
+     * is active. `hit` shape: `{ faceIndex, faceAxis, m, from }`.
      */
-    cycleColorAt(hit) {
+    applyColorAt(hit, colorId) {
         if (!this.active || !hit) return;
         const piece = this.engine.puzzle.findPieceAt(this.engine.pieces, hit.m);
         const sticker = piece?.stickers?.[hit.faceIndex];
         if (!sticker) return;
-        sticker.faceId = (sticker.faceId + 1) % 6;
+        sticker.faceId = colorId;
     }
 }

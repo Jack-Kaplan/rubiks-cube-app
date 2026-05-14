@@ -43,24 +43,25 @@ export class InputManager {
         // --- Solver status / move list ---
         this._solverStatus = document.getElementById('solver-status');
         this._solverMoves = document.getElementById('solver-moves');
+        this._solveBtn = document.getElementById('solve-btn');
+        this._gotoBtn  = document.getElementById('goto-btn');
         this._stepNext = document.getElementById('step-next');
         this._stepPrev = document.getElementById('step-prev');
-        this._stepAll = document.getElementById('step-all');
-        if (this._stepNext) {
-            this._stepNext.addEventListener('click', () => this.engine.playNext());
-        }
-        if (this._stepPrev) {
-            this._stepPrev.addEventListener('click', () => this.engine.playPrev());
-        }
-        if (this._stepAll) {
-            this._stepAll.addEventListener('click', () => this.engine.playAll());
-        }
+        this._stepAll  = document.getElementById('step-all');
+        if (this._solveBtn) this._solveBtn.addEventListener('click', () => this.engine.solve());
+        if (this._gotoBtn)  this._gotoBtn.addEventListener('click', () => this.engine.goToState());
+        if (this._stepNext) this._stepNext.addEventListener('click', () => this.engine.playNext());
+        if (this._stepPrev) this._stepPrev.addEventListener('click', () => this.engine.playPrev());
+        if (this._stepAll)  this._stepAll.addEventListener('click', () => this.engine.playAll());
         this.updateStepUI();
 
         // --- Patterns panel ---
         this._patternSelect = document.getElementById('pattern-select');
         this._paintToggle = document.getElementById('paint-toggle');
         this._patternGo = document.getElementById('pattern-go');
+        this._paintPalette = document.getElementById('paint-palette');
+        this._paintColorId = 0;
+        this._buildPaintPalette();
         this._refreshPatternOptions();
         if (this._patternSelect) {
             this._patternSelect.addEventListener('change', () => {
@@ -79,7 +80,7 @@ export class InputManager {
                 this.engine.paintMode.toggle();
                 this._updatePaintToggleUI();
                 this.setSolverStatus(this.engine.paintMode.active
-                    ? 'Paint mode: click stickers to cycle colors, then press Go.' : '');
+                    ? 'Paint mode: pick a color, click stickers to paint, then press Go.' : '');
             });
         }
         if (this._patternGo) {
@@ -122,7 +123,7 @@ export class InputManager {
             const faceAxisLookup = puzzle.constructor.FACE_AXIS || null;
             const hit = this.engine.renderer.hitTest(px, py, faceAxisLookup);
             if (this.engine.paintMode.active) {
-                this.engine.paintMode.cycleColorAt(hit);
+                this.engine.paintMode.applyColorAt(hit, this._paintColorId);
                 return;
             }
             this.selected = hit;
@@ -137,7 +138,7 @@ export class InputManager {
                 const py = (e.clientY - rect.top) * (canvas2d.height / rect.height);
                 const hit = this.engine.view2d.getClickTarget(px, py, this.engine.config);
                 if (this.engine.paintMode.active) {
-                    this.engine.paintMode.cycleColorAt(hit);
+                    this.engine.paintMode.applyColorAt(hit, this._paintColorId);
                     return;
                 }
                 this.selected = hit || null;
@@ -172,8 +173,41 @@ export class InputManager {
     }
 
     _updatePaintToggleUI() {
-        if (!this._paintToggle) return;
-        this._paintToggle.classList.toggle('active', this.engine.paintMode.active);
+        if (this._paintToggle) {
+            this._paintToggle.classList.toggle('active', this.engine.paintMode.active);
+        }
+        if (this._paintPalette) {
+            this._paintPalette.hidden = !this.engine.paintMode.active;
+        }
+    }
+
+    _buildPaintPalette() {
+        if (!this._paintPalette) return;
+        const colors = this.engine.puzzle?.colors;
+        if (!colors) return;
+        // Clear any prior swatches (keep the static label).
+        this._paintPalette.querySelectorAll('.paint-swatch').forEach(el => el.remove());
+        for (let i = 0; i < 6; i++) {
+            const sw = document.createElement('button');
+            sw.type = 'button';
+            sw.className = 'paint-swatch';
+            sw.dataset.colorId = String(i);
+            sw.style.background = colors[i];
+            sw.title = `Color ${i}`;
+            sw.addEventListener('click', () => {
+                this._paintColorId = i;
+                this._highlightActiveSwatch();
+            });
+            this._paintPalette.appendChild(sw);
+        }
+        this._highlightActiveSwatch();
+    }
+
+    _highlightActiveSwatch() {
+        if (!this._paintPalette) return;
+        this._paintPalette.querySelectorAll('.paint-swatch').forEach(el => {
+            el.classList.toggle('active', Number(el.dataset.colorId) === this._paintColorId);
+        });
     }
 
     async _onPatternGo() {
@@ -292,17 +326,13 @@ export class InputManager {
         moveSpan.append(' Rotate');
         container.appendChild(moveSpan);
 
-        // Standard controls
+        // Standard controls (solver actions and speed live in the on-screen
+        // panels — Solve, Path, Next, Back, Play all buttons + speed slider).
         const controls = [
             ['Shift', 'Reverse'],
             ['0-9', 'Layer depth'],
             ['Space', 'Scramble'],
-            ['S', 'Solve → solved'],
-            ['G', 'Solved → here'],
-            ['N', 'Next move'],
-            ['B', 'Back (undo)'],
             ['Esc', 'Reset'],
-            ['+/-', 'Speed'],
         ];
         for (const [key, desc] of controls) {
             const span = document.createElement('span');
@@ -371,47 +401,52 @@ export class InputManager {
     }
 
     /**
-     * Refresh the step controls + highlight the upcoming move. Called from
-     * the engine after queue mutations (playNext, playPrev, playAll, etc.).
+     * Refresh the step controls + tape highlight. The "head" position
+     * mirrors what the cube is actually doing: during a forward op it's
+     * the token being played; during a back op it's the token being
+     * undone; while idle it's the next-up token. Called from the engine
+     * after every animation move-boundary transition, so the counter
+     * advances live with playback.
      */
     updateStepUI() {
         const eng = this.engine;
-        const hasMore = eng.pendingTokens.length > 0;
-        const hasPlayed = eng.pendingIndex > 0;
-        const hasSequence = eng.allTokens.length > 0;
-        if (this._stepNext) this._stepNext.hidden = !hasMore;
-        if (this._stepPrev) this._stepPrev.hidden = !hasPlayed;
-        if (this._stepAll)  this._stepAll.hidden  = !hasMore;
+        const op = eng._currentOp;
+        const headPos = op ? op.tokenIdx : eng.playedCount;
+        const total = eng.allTokens.length;
+        const hasSequence = total > 0;
+        const idle = !op;
+        const moreAhead = eng.pendingTokens.length > 0;
+        const canBack = eng.playedCount > 0;
+
+        // Buttons only enabled at rest so we don't double-trigger animations.
+        if (this._stepNext) this._stepNext.hidden = !(idle && moreAhead);
+        if (this._stepPrev) this._stepPrev.hidden = !(idle && canBack);
+        if (this._stepAll)  this._stepAll.hidden  = !(idle && moreAhead);
 
         if (this._solverMoves) {
-            const idx = eng.pendingIndex;
             const spans = this._solverMoves.querySelectorAll('.solver-move');
             spans.forEach((sp, i) => {
-                sp.classList.toggle('played', i < idx);
-                sp.classList.toggle('next', i === idx && hasMore);
+                sp.classList.toggle('played', i < headPos);
+                sp.classList.toggle('playing', i === headPos && !!op);
+                sp.classList.toggle('next', i === headPos && idle && i < total);
             });
-            if (hasMore && idx < spans.length) {
-                spans[idx].scrollIntoView({ block: 'nearest', inline: 'center' });
+            if (hasSequence && headPos < spans.length) {
+                spans[headPos].scrollIntoView({ block: 'nearest', inline: 'center' });
             }
         }
 
-        // Show position while there's an active sequence.
         if (hasSequence && this._solverStatus) {
-            const total = eng.allTokens.length;
-            const done = eng.pendingIndex;
-            if (done < total) {
-                this._solverStatus.textContent =
-                    `Step ${done + 1}/${total} — next: ${eng.allTokens[done]}`;
-            } else {
+            if (idle && eng.playedCount === total) {
                 this._solverStatus.textContent = `Done (${total} moves)`;
+            } else if (op) {
+                const verb = op.type === 'back' ? 'Undoing' : 'Playing';
+                this._solverStatus.textContent =
+                    `${headPos + 1}/${total} — ${verb} ${eng.allTokens[op.tokenIdx]}`;
+            } else {
+                this._solverStatus.textContent =
+                    `${headPos + 1}/${total} — next: ${eng.allTokens[headPos]}`;
             }
         }
-    }
-
-    _updateSpeed(delta) {
-        const anim = this.engine.animation;
-        anim.setSpeed(Math.max(SPEED_MIN, Math.min(SPEED_MAX, anim.moveDuration + delta)));
-        if (this._speedSlider) this._speedSlider.value = speedToSlider(anim.moveDuration);
     }
 
     _onKeyDown(e) {
@@ -430,10 +465,6 @@ export class InputManager {
             this.clearSolverMoves();
             return;
         }
-        if (e.key === 's' || e.key === 'S') { e.preventDefault(); engine.solve(); return; }
-        if (e.key === 'g' || e.key === 'G') { e.preventDefault(); engine.goToState(); return; }
-        if (e.key === 'n' || e.key === 'N') { e.preventDefault(); engine.playNext(); return; }
-        if (e.key === 'b' || e.key === 'B') { e.preventDefault(); engine.playPrev(); return; }
 
         // Arrow keys: rotate selected sticker's layer
         if (this.selected && e.key.startsWith('Arrow')) {
@@ -475,8 +506,6 @@ export class InputManager {
             return;
         }
 
-        if (e.key === '=' || e.key === '+') { this._updateSpeed(-50); return; }
-        if (e.key === '-' || e.key === '_') { this._updateSpeed(50); return; }
 
         // Number keys 0-9: set layer depth
         const num = parseInt(e.key);

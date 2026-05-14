@@ -33,11 +33,13 @@
         </div>
         <div class="solver-panel">
             <div class="solver-controls">
+                <button id="solve-btn" type="button">Solve →</button>
+                <button id="goto-btn" type="button">↩ Path here</button>
                 <button id="step-prev" type="button" hidden>◀ Back</button>
                 <button id="step-next" type="button" hidden>Next ▶</button>
                 <button id="step-all" type="button" hidden>Play all ⏩</button>
-                <span id="solver-status"></span>
             </div>
+            <div id="solver-status"></div>
             <div id="solver-moves"></div>
         </div>
         <div class="patterns-panel">
@@ -47,6 +49,9 @@
             </select>
             <button id="paint-toggle" type="button">Paint</button>
             <button id="pattern-go" type="button">Go ▶</button>
+        </div>
+        <div id="paint-palette" class="paint-palette" hidden>
+            <span class="paint-label">Color:</span>
         </div>
     </div>
     <script type="module" src="js/main.js"></script>

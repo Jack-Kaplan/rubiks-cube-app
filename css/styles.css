@@ -136,6 +136,13 @@ kbd {
     box-shadow: 0 0 0 2px rgba(60,60,60,0.25);
 }
 
+.solver-move.playing {
+    background: #e88c2a;
+    color: #fff;
+    border-color: #c97200;
+    box-shadow: 0 0 0 2px rgba(232,140,42,0.35);
+}
+
 .solver-controls {
     display: flex;
     flex-wrap: wrap;
@@ -189,4 +196,31 @@ kbd {
     background: #444;
     color: #fff;
     border-color: #444;
+}
+
+.paint-palette {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.paint-label { margin-right: 4px; }
+
+.paint-swatch {
+    width: 26px;
+    height: 26px;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 0;
+}
+
+.paint-swatch.active {
+    border-color: #222;
+    box-shadow: 0 0 0 2px rgba(0,0,0,0.2);
 }

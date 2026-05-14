@@ -82,7 +82,10 @@ export function decodeMove(notation, puzzle, config) {
     if (double) {
         // 180° = same 90° move queued twice. AnimationQueue plays each at
         // moveAngle (π/2) so two consecutive plays produce a half-turn.
-        return [...moves, ...moves];
+        // Use distinct objects so AnimationQueue.current changes identity
+        // between the two halves — the engine's move-boundary detection
+        // relies on that to advance the step counter.
+        return [...moves, ...moves.map(m => ({ ...m }))];
     }
     return moves;
 }

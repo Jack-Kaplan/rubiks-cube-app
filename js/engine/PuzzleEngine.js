@@ -27,13 +27,17 @@ export class PuzzleEngine {
         this._solving = false;
         this.paintMode = new PaintMode(this);
 
-        // Solver/pattern results land in pendingTokens; the user advances
-        // through them one notation token at a time with playNext() (or
-        // dumps the remainder into the animation queue with playAll()).
-        // We never auto-play — stepping is the default.
-        this.pendingTokens = [];      // remaining notation tokens
-        this.pendingIndex = 0;         // index of the next token (within original list)
-        this.allTokens = [];           // full original token list (for display)
+        // Solver/pattern results land in pendingTokens; the user walks the
+        // tape with playNext() / playPrev(), or hands it off to auto-play
+        // with playAll(). The "head" moves token-by-token in lockstep with
+        // animation completion so the on-screen counter mirrors what the
+        // cube is actually doing.
+        this.allTokens = [];          // full original token list (for display)
+        this.pendingTokens = [];      // tokens not yet queued for animation
+        this.playedCount = 0;         // number of tokens fully animated
+        this._currentOp = null;       // {type:'forward'|'back', tokenIdx, remainingMoves}
+        this._autoPlay = false;
+        this._lastCompletedCount = this.animation.completedCount;
     }
 
     /**
@@ -179,7 +183,9 @@ export class PuzzleEngine {
 
             this.allTokens = moves;
             this.pendingTokens = [...moves];
-            this.pendingIndex = 0;
+            this.playedCount = 0;
+            this._currentOp = null;
+            this._autoPlay = false;
             ui?.renderSolverMoves?.(moves);
             ui?.updateStepUI?.();
 
@@ -190,7 +196,7 @@ export class PuzzleEngine {
                 ui?.setSolverStatus?.(`${verb}: already there (${tookS}s)`);
             } else {
                 ui?.setSolverStatus?.(
-                    `${verb}: ${n} move${n === 1 ? '' : 's'} (${tookS}s) — N next, B back, Play all to run.`
+                    `${verb}: ${n} move${n === 1 ? '' : 's'} (${tookS}s) — use Next / Back / Play all.`
                 );
             }
         } catch (e) {
@@ -201,75 +207,118 @@ export class PuzzleEngine {
     }
 
     /**
-     * Step one notation token from the pending buffer into the animation
-     * queue. A token like "U2" expands to two engine moves, played as
-     * consecutive quarter-turns — but from the user's perspective it's
-     * still one "step". Returns the token that just played, or null if
-     * the buffer is empty.
+     * Queue the next notation token for animation. While an op is in
+     * flight the call is a no-op — wait for the cube to finish.
      */
     playNext() {
-        if (this.pendingTokens.length === 0) return null;
+        if (this._currentOp || this.pendingTokens.length === 0) return null;
         const tok = this.pendingTokens.shift();
-        for (const m of decodeMove(tok, this.puzzle, this.config)) {
-            this.animation.queueMove(m);
+        const moves = decodeMove(tok, this.puzzle, this.config);
+        for (const m of moves) this.animation.queueMove(m);
+        this._currentOp = {
+            type: 'forward',
+            tokenIdx: this.playedCount,
+            // Tokens that decode to zero engine moves (defensive; shouldn't
+            // happen from valid solver output) still need a one-frame op so
+            // _onMoveCompleted can advance the counter.
+            remainingMoves: Math.max(1, moves.length),
+        };
+        if (moves.length === 0) {
+            // Synthesize a one-shot completion next frame.
+            this._currentOp.remainingMoves = 0;
+            this._finalizeCurrentOp();
         }
-        this.pendingIndex++;
         this.input?.updateStepUI?.();
         return tok;
-    }
-
-    /** Drain all remaining pending tokens straight into the animation queue. */
-    playAll() {
-        while (this.pendingTokens.length) this.playNext();
     }
 
     /**
-     * Step backward by one notation token: undo the most recently played
-     * token by applying its inverse via the animation queue (so the user
-     * sees the cube physically rewind). The token is pushed back to the
-     * front of the pending buffer so subsequent Next replays it. Returns
-     * the token that was undone, or null at the start.
+     * Hand the remainder off to auto-play. The render loop advances one
+     * token at a time so the counter and tape highlight stay in sync with
+     * what the cube is actually doing.
+     */
+    playAll() {
+        this._autoPlay = true;
+        if (!this._currentOp && this.pendingTokens.length > 0) this.playNext();
+    }
+
+    /**
+     * Undo the most recently completed token by animating its inverse.
+     * The token is pushed back to the front of pendingTokens so Next can
+     * replay it. Disabled while another op is animating.
      */
     playPrev() {
-        if (this.pendingIndex === 0 || this.allTokens.length === 0) return null;
-
-        // Flush any in-flight forward animation so the cube state reflects
-        // everything played up to "now" before we start rewinding.
-        if (this.animation.current) {
-            this.puzzle.applyRotation(this.pieces, this.animation.current);
-        }
-        for (const m of this.animation.queue) {
-            this.puzzle.applyRotation(this.pieces, m);
-        }
-        this.animation.clear();
-
-        this.pendingIndex--;
-        const tok = this.allTokens[this.pendingIndex];
-        // Re-queue it at the front so Next replays the same move.
+        if (this._currentOp || this.playedCount === 0) return null;
+        const tokenIdx = this.playedCount - 1;
+        const tok = this.allTokens[tokenIdx];
         this.pendingTokens.unshift(tok);
-
-        // Animate the inverse so the visual matches the index move.
         const invTok = invertNotation(tok);
-        if (invTok) {
-            for (const m of decodeMove(invTok, this.puzzle, this.config)) {
-                this.animation.queueMove(m);
-            }
+        const invMoves = invTok ? decodeMove(invTok, this.puzzle, this.config) : [];
+        for (const m of invMoves) this.animation.queueMove(m);
+        this._currentOp = {
+            type: 'back',
+            tokenIdx,
+            remainingMoves: Math.max(1, invMoves.length),
+        };
+        if (invMoves.length === 0) {
+            this._currentOp.remainingMoves = 0;
+            this._finalizeCurrentOp();
         }
         this.input?.updateStepUI?.();
         return tok;
     }
 
-    /** Drop any pending tokens and reset step UI. */
+    /** Drop any pending tokens and reset step state. */
     clearPending() {
         this.pendingTokens = [];
         this.allTokens = [];
-        this.pendingIndex = 0;
+        this.playedCount = 0;
+        this._currentOp = null;
+        this._autoPlay = false;
+        this._lastCompletedCount = this.animation.completedCount;
         this.input?.updateStepUI?.();
+    }
+
+    /**
+     * Called from the render loop when the animation queue's `current`
+     * transitions to a different move (or to null). Each transition means
+     * the previous move finished — we tally it against the current op
+     * and, if all of the op's engine moves are done, advance the head.
+     */
+    _onMoveCompleted() {
+        if (!this._currentOp) return;
+        this._currentOp.remainingMoves--;
+        if (this._currentOp.remainingMoves > 0) {
+            this.input?.updateStepUI?.();
+            return;
+        }
+        this._finalizeCurrentOp();
+    }
+
+    _finalizeCurrentOp() {
+        const op = this._currentOp;
+        this._currentOp = null;
+        if (op.type === 'forward') this.playedCount = op.tokenIdx + 1;
+        else this.playedCount = op.tokenIdx;
+        this.input?.updateStepUI?.();
+        if (this._autoPlay && this.pendingTokens.length > 0) {
+            this.playNext();
+        } else if (this.pendingTokens.length === 0) {
+            this._autoPlay = false;
+        }
     }
 
     /** Main render loop — call once, runs via requestAnimationFrame. */
     _frame(time) {
         const { current: move, progress } = this.animation.update(time, this.puzzle, this.pieces);
+        // Detect move completions via AnimationQueue's monotonic counter so
+        // we don't rely on object identity (the same move object can appear
+        // multiple times in the queue — e.g., 180° turns).
+        const completed = this.animation.completedCount;
+        while (this._lastCompletedCount < completed) {
+            this._lastCompletedCount++;
+            this._onMoveCompleted();
+        }
 
         // 2D view
         if (this.view2d) {

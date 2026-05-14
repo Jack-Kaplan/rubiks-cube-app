@@ -10,6 +10,11 @@ export class AnimationQueue {
         this.current = null;
         this.moveStart = 0;
         this.moveDuration = 300;
+        // Monotonic counter incremented every time a move finishes (progress
+        // reaches 1 and applyRotation runs). The PuzzleEngine uses this to
+        // drive its step counter — robust against the same move object
+        // appearing more than once in the queue.
+        this.completedCount = 0;
     }
 
     queueMove(move) {
@@ -28,6 +33,7 @@ export class AnimationQueue {
             if (progress >= 1) {
                 puzzle.applyRotation(pieces, this.current);
                 this.current = null;
+                this.completedCount++;
                 progress = 0;
             }
         }
@@ -42,6 +48,8 @@ export class AnimationQueue {
     clear() {
         this.queue = [];
         this.current = null;
+        // completedCount intentionally not reset — it's monotonic so the
+        // engine can take snapshots across clears without losing track.
     }
 
     setSpeed(duration) {
