@@ -47,6 +47,7 @@ export class InputManager {
         this._stepAll     = document.getElementById('step-all');
         this._stepSkip    = document.getElementById('step-skip');
         this._stepSkipBack = document.getElementById('step-skip-back');
+        this._playbackGroup = document.getElementById('playback-group');
         if (this._scrambleBtn) this._scrambleBtn.addEventListener('click', () => this.engine.scramble());
         if (this._resetBtn)    this._resetBtn.addEventListener('click', () => this._onReset());
         if (this._solveBtn)    this._solveBtn.addEventListener('click', () => this.engine.solve());
@@ -428,34 +429,15 @@ export class InputManager {
         // Step controls stay visible in place; disabled during animation
         // or when there's nothing to act on. Solve/Go are also disabled
         // mid-animation so the user can't queue a new sequence on top.
-        const showStepRow = hasSequence;
-        if (this._stepNext) {
-            this._stepNext.hidden = !showStepRow;
-            this._stepNext.disabled = !(idle && moreAhead);
-        }
-        if (this._stepPrev) {
-            this._stepPrev.hidden = !showStepRow;
-            this._stepPrev.disabled = !(idle && canBack);
-        }
-        if (this._stepAll) {
-            this._stepAll.hidden = !showStepRow;
-            this._stepAll.disabled = !(idle && moreAhead);
-        }
-        if (this._stepRevAll) {
-            this._stepRevAll.hidden = !showStepRow;
-            this._stepRevAll.disabled = !(idle && canBack);
-        }
-        // Skip-forward / Skip-back: each is enabled whenever there's
-        // material to consume in that direction (pending tokens, or an
-        // in-flight op which we'll flush either way).
-        if (this._stepSkip) {
-            this._stepSkip.hidden = !hasSequence;
-            this._stepSkip.disabled = !(eng.pendingTokens.length > 0 || !!op);
-        }
-        if (this._stepSkipBack) {
-            this._stepSkipBack.hidden = !hasSequence;
-            this._stepSkipBack.disabled = !(eng.playedCount > 0 || !!op);
-        }
+        // The whole playback group appears/disappears as a unit. Buttons
+        // inside it only toggle disabled state.
+        if (this._playbackGroup) this._playbackGroup.hidden = !hasSequence;
+        if (this._stepNext)     this._stepNext.disabled     = !(idle && moreAhead);
+        if (this._stepPrev)     this._stepPrev.disabled     = !(idle && canBack);
+        if (this._stepAll)      this._stepAll.disabled      = !(idle && moreAhead);
+        if (this._stepRevAll)   this._stepRevAll.disabled   = !(idle && canBack);
+        if (this._stepSkip)     this._stepSkip.disabled     = !(eng.pendingTokens.length > 0 || !!op);
+        if (this._stepSkipBack) this._stepSkipBack.disabled = !(eng.playedCount > 0 || !!op);
         // Animation-aware enable: Scramble/Reset/Solve/Path lock while
         // anything is in flight (step ops or a scramble draining through
         // the animation queue).

@@ -30,16 +30,22 @@
         </div>
         <div class="solver-panel">
             <div class="solver-controls">
-                <button id="scramble-btn" type="button">Scramble</button>
-                <button id="reset-btn"    type="button">Reset</button>
-                <button id="solve-btn"    type="button">Solve →</button>
-                <button id="goto-btn"     type="button">↩ Path here</button>
-                <button id="step-skip-back" type="button" hidden>⏮ Skip back</button>
-                <button id="step-rev-all"   type="button" hidden>⏪ Reverse all</button>
-                <button id="step-prev"      type="button" hidden>◀ Back</button>
-                <button id="step-next"      type="button" hidden>Next ▶</button>
-                <button id="step-all"       type="button" hidden>Play all ⏩</button>
-                <button id="step-skip"      type="button" hidden>Skip ⏭</button>
+                <div class="ctrl-group">
+                    <button id="scramble-btn" type="button">Scramble</button>
+                    <button id="reset-btn"    type="button">Reset</button>
+                </div>
+                <div class="ctrl-group">
+                    <button id="solve-btn"    type="button">Solve →</button>
+                    <button id="goto-btn"     type="button">↩ Path here</button>
+                </div>
+                <div class="ctrl-group" id="playback-group" hidden>
+                    <button id="step-skip-back" type="button">⏮ Skip back</button>
+                    <button id="step-rev-all"   type="button">⏪ Reverse all</button>
+                    <button id="step-prev"      type="button">◀ Back</button>
+                    <button id="step-next"      type="button">Next ▶</button>
+                    <button id="step-all"       type="button">Play all ⏩</button>
+                    <button id="step-skip"      type="button">Skip ⏭</button>
+                </div>
             </div>
             <div id="solver-status"></div>
             <div class="tape-viewport">

@@ -193,8 +193,23 @@ kbd {
     flex-wrap: wrap;
     justify-content: center;
     align-items: center;
-    gap: 8px;
+    gap: 8px 18px;  /* tight rows, generous space between groups */
     margin-bottom: 0.5rem;
+}
+
+/* Each .ctrl-group is a tight cluster that stays together when wrapping. */
+.ctrl-group {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Faint divider after each group except the last — kept invisible when
+   a wrap puts the divider at the start of a line. */
+.ctrl-group + .ctrl-group {
+    border-left: 1px solid #e2e2e2;
+    padding-left: 14px;
 }
 
 .solver-controls button {
