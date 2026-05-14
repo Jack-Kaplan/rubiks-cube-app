@@ -91,3 +91,102 @@ kbd {
     width: 120px;
     accent-color: #666;
 }
+
+.solver-panel {
+    margin-top: 1rem;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+}
+
+#solver-status {
+    font-size: 0.85rem;
+    color: #666;
+    min-height: 1.2em;
+    margin-bottom: 0.5rem;
+}
+
+#solver-moves {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+    font-family: monospace;
+    font-size: 0.85rem;
+}
+
+.solver-move {
+    padding: 2px 6px;
+    background: #e8e8e8;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+.solver-move.played {
+    background: #d4e8d4;
+    color: #486848;
+    border-color: #99c499;
+}
+
+.solver-move.next {
+    background: #444;
+    color: #fff;
+    border-color: #444;
+    box-shadow: 0 0 0 2px rgba(60,60,60,0.25);
+}
+
+.solver-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 0.5rem;
+}
+
+.solver-controls button {
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 3px 10px;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    background: #fff;
+    cursor: pointer;
+}
+
+.solver-controls button:hover { border-color: #999; }
+.solver-controls button.active { background: #444; color: #fff; border-color: #444; }
+.solver-controls #solver-status { display: inline; min-height: 0; margin-bottom: 0; }
+
+.patterns-panel {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.patterns-panel select,
+.patterns-panel button {
+    font: inherit;
+    padding: 3px 10px;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    background: #fff;
+    cursor: pointer;
+}
+
+.patterns-panel button:hover,
+.patterns-panel select:hover {
+    border-color: #999;
+}
+
+.patterns-panel button.active {
+    background: #444;
+    color: #fff;
+    border-color: #444;
+}

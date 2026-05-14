@@ -31,6 +31,23 @@
             <input id="speed" type="range" min="50" max="1000" step="50" value="750">
             <span>Fast</span>
         </div>
+        <div class="solver-panel">
+            <div class="solver-controls">
+                <button id="step-toggle" type="button">Step</button>
+                <button id="step-prev" type="button" hidden>◀ Back</button>
+                <button id="step-next" type="button" hidden>Next ▶</button>
+                <span id="solver-status"></span>
+            </div>
+            <div id="solver-moves"></div>
+        </div>
+        <div class="patterns-panel">
+            <label for="pattern-select">Pattern:</label>
+            <select id="pattern-select">
+                <option value="">— pick —</option>
+            </select>
+            <button id="paint-toggle" type="button">Paint</button>
+            <button id="pattern-go" type="button">Go ▶</button>
+        </div>
     </div>
     <script type="module" src="js/main.js"></script>
 </body>

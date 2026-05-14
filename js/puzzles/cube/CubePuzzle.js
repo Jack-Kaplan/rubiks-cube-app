@@ -101,13 +101,19 @@ export class CubePuzzle extends PuzzleDefinition {
         const scrambleConfig = { ...config };
         let lastAxis = -1;
         const numMoves = config.N * 7;
+        // On N=3, slice (depth=2) moves rotate centers between faces, which
+        // produces states the standard 3x3 Kociemba solver can't fully
+        // unwind (it solves the 48 non-center stickers and leaves displaced
+        // centers visible). For N>=4 the reduction solver handles non-
+        // standard centers natively, so we keep the full depth range.
+        const maxDepth = config.N === 3 ? 1 : config.N;
         for (let i = 0; i < numMoves; i++) {
             let bm;
             do {
                 const key = baseMoveKeys[Math.floor(Math.random() * baseMoveKeys.length)];
                 bm = this.baseMoves[key];
             } while (bm.axis === lastAxis);
-            scrambleConfig.selectedDepth = 1 + Math.floor(Math.random() * config.N);
+            scrambleConfig.selectedDepth = 1 + Math.floor(Math.random() * maxDepth);
             const reversed = Math.random() < 0.5;
             moves.push(this.resolveMove(bm, reversed, scrambleConfig));
             lastAxis = bm.axis;
@@ -190,6 +196,24 @@ export class CubePuzzle extends PuzzleDefinition {
             if (Math.abs(p[i][faceAxis] - extreme) < 0.1) faceVerts.push(i);
         if (faceVerts.length !== 4) return faceIndex;
 
+        // Identify which of this piece's per-face stickers currently sits on
+        // the requested cube face by matching the 4 corner indices on that
+        // face against each FACE_DEFS entry. Return the stored faceId so
+        // paint-mode mutations (which write to piece.stickers[i].faceId)
+        // flow through to encoding.
+        const faceVertSet = new Set(faceVerts);
+        for (let defIdx = 0; defIdx < FACE_DEFS.length; defIdx++) {
+            const defIds = FACE_DEFS[defIdx].idx;
+            if (defIds.length === faceVerts.length &&
+                defIds.every(i => faceVertSet.has(i))) {
+                const sticker = piece.stickers[defIdx];
+                if (sticker) return sticker.faceId;
+                break;
+            }
+        }
+
+        // Fallback (no sticker recorded for that face — shouldn't happen
+        // for a piece that's actually on the cube surface).
         const cx = faceVerts.map(i => Math.floor(i / 4));
         if (cx.every(c => c === cx[0])) return cx[0] === 1 ? 3 : 2;
         const cy = faceVerts.map(i => Math.floor((i % 4) / 2));
