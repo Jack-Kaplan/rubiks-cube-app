@@ -1,0 +1,70 @@
+# Sample compose file for the cube-solver app.
+#
+# Build once:    docker compose build
+# Run:           docker compose up -d
+# Stop:          docker compose down
+# Logs:          docker compose logs -f cube
+# Rebuild fast:  docker compose build (frontend/backend edits hit the image
+#                in <1s thanks to layer ordering; only edits to
+#                backend/prefetch_tables.sh or requirements.txt re-fetch).
+#
+# The image is self-contained — all dwalton76 lookup tables for N=4..7
+# (which back-reduce N=8..11) are baked in at build time. The running
+# container does NOT need outbound internet to solve any cube.
+
+services:
+  cube:
+    build: .
+    image: cube-solver:latest
+    container_name: cube-solver
+    restart: unless-stopped
+
+    # HOST_PORT:CONTAINER_PORT — change the left number to expose on
+    # whatever port your reverse proxy / lab gateway expects. The
+    # container always listens on 8000 internally.
+    ports:
+      - "8000:8000"
+
+    # Lightweight health check via the FastAPI /health endpoint.
+    healthcheck:
+      test:
+        - "CMD"
+        - "python3"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    # The solver doesn't write files at runtime — keep the FS read-only.
+    # /tmp stays writable for kociemba's scratch.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+
+    # Drop everything we don't need.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    # Optional resource limits. N=11 solves use ~500 MB RAM peak; bump if
+    # you queue many concurrent solves.
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "2.0"
+
+# Want a paranoid offline guarantee? Drop the `ports:` block above and
+# put the service on an internal-only network — the container will be
+# reachable only to other compose services, with no host port mapping
+# and no internet route:
+#
+#   networks:
+#     - cubenet
+#
+# networks:
+#   cubenet:
+#     internal: true

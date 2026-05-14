@@ -1,9 +1,0 @@
-services:
-  cube:
-    build: .
-    image: cube-solver:latest
-    ports:
-      # HOST_PORT:CONTAINER_PORT — change the left side to whatever port
-      # you want the lab to expose. Container always listens on 8000.
-      - "8000:8000"
-    restart: unless-stopped
