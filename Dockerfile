@@ -30,23 +30,32 @@ ENV PYTHONPATH="/opt/rubiks-cube-NxNxN-solver:${PYTHONPATH}" \
     PATH="/opt/rubiks-cube-NxNxN-solver:${PATH}"
 
 WORKDIR /app
+
+# --- Slow, rarely-invalidated layers go first so day-to-day code edits
+#     never trigger a re-prefetch of the ~11 GB lookup-table cache. The
+#     order below is important; Docker's layer cache is content-addressed,
+#     so anything below an edited line gets rebuilt.
+
+# Python deps. Invalidates only when requirements.txt changes.
 COPY backend/requirements.txt .
 RUN pip install -r requirements.txt
+
+# Bake every dwalton76 lookup table into the image. ~3 min on a cold build.
+# Invalidates only when prefetch_tables.sh itself changes (or the solver
+# repo is re-cloned at the top of this Dockerfile).
+COPY backend/prefetch_tables.sh /tmp/prefetch_tables.sh
+RUN bash /tmp/prefetch_tables.sh && rm /tmp/prefetch_tables.sh
+
+# --- Fast, frequently-edited layers go LAST. Changes here rebuild in
+#     seconds because nothing below is invalidated.
 
 # FastAPI app code.
 COPY backend/app ./app
 
-# Frontend static files. Same image, same port — FastAPI mounts /app/static
-# at "/" and serves index.html, css/, and js/ alongside the API routes.
+# Frontend static files served by FastAPI at "/".
 COPY index.html ./static/index.html
-COPY css ./static/css
-COPY js ./static/js
-
-# Optional: pre-warm lookup tables for big cubes (N=2, 4..7) so they're
-# baked into the image instead of fetched at runtime. This adds ~hundreds
-# of MB and several minutes to the build. Uncomment to enable.
-COPY backend/warm_tables.py /tmp/warm_tables.py
-# RUN python3 /tmp/warm_tables.py && rm /tmp/warm_tables.py
+COPY css        ./static/css
+COPY js         ./static/js
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
