@@ -1,4 +1,7 @@
-FROM python:3.11-slim
+# Pinned to a specific digest so security updates / Debian base bumps to
+# python:3.11-slim don't silently change our build. Update deliberately
+# by repulling the tag and replacing the digest below.
+FROM python:3.11-slim@sha256:9a7765b36773a37061455b332f18e265e7f58f6fea9c419a550d2a8b0e9db834
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -11,12 +14,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /opt
 
-# Clone the NxN solver. We bypass `make init` (which fails on modern pip
-# due to the project's setup.py lacking PEP 660 support) and instead:
+# Clone the NxN solver pinned to a specific commit. Keep this in lock-step
+# with prefetch_tables.sh — table filenames are scraped from the solver
+# source, so an upstream code change could rename/remove tables. The
+# current digest is the last commit on master as of 2023-08-07. To bump:
+#   git ls-remote https://github.com/dwalton76/rubiks-cube-NxNxN-solver HEAD
+# and replace the SHA below, then rebuild from the prefetch step.
+#
+# We bypass `make init` (which fails on modern pip due to the project's
+# setup.py lacking PEP 660 support) and instead:
 #   1. compile the C ida_search_via_graph binary directly with gcc, and
 #   2. add the repo to PYTHONPATH so `python3 rubiks-cube-solver.py`
 #      imports the `rubikscubennnsolver` package without installation.
-RUN git clone --depth 1 https://github.com/dwalton76/rubiks-cube-NxNxN-solver.git
+ARG SOLVER_SHA=c776db79314db3d98cc3dd99685ca85766656937
+RUN git clone https://github.com/dwalton76/rubiks-cube-NxNxN-solver.git \
+    && cd rubiks-cube-NxNxN-solver \
+    && git checkout "${SOLVER_SHA}" \
+    && git -c advice.detachedHead=false log -1 --format='solver pinned at %h %cd %s' --date=short
 WORKDIR /opt/rubiks-cube-NxNxN-solver
 RUN gcc -O3 -o ida_search_via_graph \
         rubikscubennnsolver/ida_search_core.c \
