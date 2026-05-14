@@ -384,13 +384,12 @@ export class InputManager {
             // Slide the tape so the head sits at the viewport's center
             // marker — head stays fixed, tape translates past it.
             const viewport = this._solverMoves.parentElement;
-            if (viewport) {
-                viewport.hidden = !hasSequence;
-                if (hasSequence && headPos < spans.length) {
-                    const head = spans[headPos];
-                    const tx = viewport.clientWidth / 2 - (head.offsetLeft + head.offsetWidth / 2);
-                    this._solverMoves.style.transform = `translateX(${tx}px)`;
-                }
+            if (viewport && hasSequence && headPos < spans.length) {
+                const head = spans[headPos];
+                const tx = viewport.clientWidth / 2 - (head.offsetLeft + head.offsetWidth / 2);
+                this._solverMoves.style.transform = `translateX(${tx}px)`;
+            } else if (viewport) {
+                this._solverMoves.style.transform = 'translateX(0)';
             }
         }
 
