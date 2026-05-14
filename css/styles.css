@@ -164,6 +164,12 @@ kbd {
 
 .solver-controls button:hover { border-color: #999; }
 .solver-controls button.active { background: #444; color: #fff; border-color: #444; }
+.solver-controls button:disabled {
+    color: #aaa;
+    background: #f4f4f4;
+    border-color: #ddd;
+    cursor: not-allowed;
+}
 .solver-controls #solver-status { display: inline; min-height: 0; margin-bottom: 0; }
 
 .patterns-panel {

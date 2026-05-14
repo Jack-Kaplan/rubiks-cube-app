@@ -418,10 +418,24 @@ export class InputManager {
         const moreAhead = eng.pendingTokens.length > 0;
         const canBack = eng.playedCount > 0;
 
-        // Buttons only enabled at rest so we don't double-trigger animations.
-        if (this._stepNext) this._stepNext.hidden = !(idle && moreAhead);
-        if (this._stepPrev) this._stepPrev.hidden = !(idle && canBack);
-        if (this._stepAll)  this._stepAll.hidden  = !(idle && moreAhead);
+        // Step controls stay visible in place; disabled during animation
+        // or when there's nothing to act on. Solve/Go are also disabled
+        // mid-animation so the user can't queue a new sequence on top.
+        const showStepRow = hasSequence;
+        if (this._stepNext) {
+            this._stepNext.hidden = !showStepRow;
+            this._stepNext.disabled = !(idle && moreAhead);
+        }
+        if (this._stepPrev) {
+            this._stepPrev.hidden = !showStepRow;
+            this._stepPrev.disabled = !(idle && canBack);
+        }
+        if (this._stepAll) {
+            this._stepAll.hidden = !showStepRow;
+            this._stepAll.disabled = !(idle && moreAhead);
+        }
+        if (this._solveBtn) this._solveBtn.disabled = !idle;
+        if (this._gotoBtn)  this._gotoBtn.disabled  = !idle;
 
         if (this._solverMoves) {
             const spans = this._solverMoves.querySelectorAll('.solver-move');
