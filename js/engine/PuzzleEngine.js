@@ -274,6 +274,70 @@ export class PuzzleEngine {
     }
 
     /**
+     * Snap forward to the end of the tape: apply any in-flight animation
+     * plus every remaining pending token directly to piece state. Useful
+     * when a long sequence would take minutes to watch.
+     */
+    skipToEnd() {
+        this._flushInFlightToPieces();
+        while (this.pendingTokens.length > 0) {
+            const tok = this.pendingTokens.shift();
+            for (const m of decodeMove(tok, this.puzzle, this.config)) {
+                this.puzzle.applyRotation(this.pieces, m);
+            }
+            this.playedCount++;
+        }
+        this._autoPlay = false;
+        this._autoReverse = false;
+        this._lastCompletedCount = this.animation.completedCount;
+        this.input?.updateStepUI?.();
+    }
+
+    /**
+     * Symmetric counterpart to skipToEnd: snap backward to the start of
+     * the tape by applying every played token's inverse directly.
+     */
+    skipToStart() {
+        this._flushInFlightToPieces();
+        while (this.playedCount > 0) {
+            const idx = this.playedCount - 1;
+            const tok = this.allTokens[idx];
+            const inv = invertNotation(tok);
+            if (inv) {
+                for (const m of decodeMove(inv, this.puzzle, this.config)) {
+                    this.puzzle.applyRotation(this.pieces, m);
+                }
+            }
+            this.pendingTokens.unshift(tok);
+            this.playedCount--;
+        }
+        this._autoPlay = false;
+        this._autoReverse = false;
+        this._lastCompletedCount = this.animation.completedCount;
+        this.input?.updateStepUI?.();
+    }
+
+    /**
+     * Apply any in-flight animation directly to pieces and settle the
+     * in-flight op's index. Used by both skip directions to consolidate
+     * mid-animation state before draining the rest.
+     */
+    _flushInFlightToPieces() {
+        if (this.animation.current) {
+            this.puzzle.applyRotation(this.pieces, this.animation.current);
+        }
+        for (const m of this.animation.queue) {
+            this.puzzle.applyRotation(this.pieces, m);
+        }
+        this.animation.clear();
+        if (this._currentOp) {
+            if (this._currentOp.type === 'forward') this.playedCount = this._currentOp.tokenIdx + 1;
+            else this.playedCount = this._currentOp.tokenIdx;
+            this._currentOp = null;
+        }
+    }
+
+    /**
      * Undo the most recently completed token by animating its inverse.
      * The token is pushed back to the front of pendingTokens so Next can
      * replay it. Disabled while another op is animating.
