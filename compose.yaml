@@ -1,16 +1,12 @@
 # Sample compose file for the cube-solver app.
 #
-# Build once:    docker compose build
-# Run:           docker compose up -d
-# Stop:          docker compose down
-# Logs:          docker compose logs -f cube
-# Rebuild fast:  docker compose build (frontend/backend edits hit the image
-#                in <1s thanks to layer ordering; only edits to
-#                backend/prefetch_tables.sh or requirements.txt re-fetch).
+#   docker compose build      # cold build pulls lookup tables; see README
+#   docker compose up -d
+#   docker compose logs -f
+#   docker compose down
 #
-# The image is self-contained — all dwalton76 lookup tables for N=4..7
-# (which back-reduce N=8..11) are baked in at build time. The running
-# container does NOT need outbound internet to solve any cube.
+# The running container needs no outbound internet. For self-hosting the
+# build-time lookup tables, see README → Solver → Lookup tables.
 
 services:
   cube:

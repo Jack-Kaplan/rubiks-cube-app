@@ -54,11 +54,18 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install -r requirements.txt
 
-# Bake every dwalton76 lookup table into the image. ~3 min on a cold build.
-# Invalidates only when prefetch_tables.sh itself changes (or the solver
-# repo is re-cloned at the top of this Dockerfile).
+# Bake every dwalton76 lookup table into the image. Default: per-file
+# fetch from dwalton76's public S3 bucket. Override TABLES_TARBALL_URL
+# to point at a self-hosted single-tarball mirror — see the README's
+# "Lookup tables" section. The deployed image makes no external calls
+# either way; this only affects where the build pulls from.
+ARG TABLES_TARBALL_URL=""
+ARG TABLES_BUCKET_URL="https://rubiks-cube-lookup-tables.s3.amazonaws.com"
 COPY backend/prefetch_tables.sh /tmp/prefetch_tables.sh
-RUN bash /tmp/prefetch_tables.sh && rm /tmp/prefetch_tables.sh
+RUN TABLES_TARBALL_URL="${TABLES_TARBALL_URL}" \
+    TABLES_BUCKET_URL="${TABLES_BUCKET_URL}" \
+    bash /tmp/prefetch_tables.sh \
+    && rm /tmp/prefetch_tables.sh
 
 # --- Fast, frequently-edited layers go LAST. Changes here rebuild in
 #     seconds because nothing below is invalidated.
