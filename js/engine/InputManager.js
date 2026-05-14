@@ -43,19 +43,17 @@ export class InputManager {
         // --- Solver status / move list ---
         this._solverStatus = document.getElementById('solver-status');
         this._solverMoves = document.getElementById('solver-moves');
-        this._stepToggle = document.getElementById('step-toggle');
         this._stepNext = document.getElementById('step-next');
         this._stepPrev = document.getElementById('step-prev');
-        if (this._stepToggle) {
-            this._stepToggle.addEventListener('click', () => {
-                this.engine.setStepMode(!this.engine.stepMode);
-            });
-        }
+        this._stepAll = document.getElementById('step-all');
         if (this._stepNext) {
             this._stepNext.addEventListener('click', () => this.engine.playNext());
         }
         if (this._stepPrev) {
             this._stepPrev.addEventListener('click', () => this.engine.playPrev());
+        }
+        if (this._stepAll) {
+            this._stepAll.addEventListener('click', () => this.engine.playAll());
         }
         this.updateStepUI();
 
@@ -301,8 +299,8 @@ export class InputManager {
             ['Space', 'Scramble'],
             ['S', 'Solve → solved'],
             ['G', 'Solved → here'],
-            ['N', 'Next move (step)'],
-            ['B', 'Back (undo step)'],
+            ['N', 'Next move'],
+            ['B', 'Back (undo)'],
             ['Esc', 'Reset'],
             ['+/-', 'Speed'],
         ];
@@ -374,34 +372,31 @@ export class InputManager {
 
     /**
      * Refresh the step controls + highlight the upcoming move. Called from
-     * the engine after queue mutations (playNext, setStepMode, etc.).
+     * the engine after queue mutations (playNext, playPrev, playAll, etc.).
      */
     updateStepUI() {
         const eng = this.engine;
-        if (this._stepToggle) {
-            this._stepToggle.classList.toggle('active', eng.stepMode);
-        }
-        if (this._stepNext) {
-            const hasMore = eng.pendingTokens.length > 0;
-            this._stepNext.hidden = !(eng.stepMode && hasMore);
-        }
-        if (this._stepPrev) {
-            this._stepPrev.hidden = !(eng.stepMode && eng.pendingIndex > 0);
-        }
+        const hasMore = eng.pendingTokens.length > 0;
+        const hasPlayed = eng.pendingIndex > 0;
+        const hasSequence = eng.allTokens.length > 0;
+        if (this._stepNext) this._stepNext.hidden = !hasMore;
+        if (this._stepPrev) this._stepPrev.hidden = !hasPlayed;
+        if (this._stepAll)  this._stepAll.hidden  = !hasMore;
+
         if (this._solverMoves) {
             const idx = eng.pendingIndex;
             const spans = this._solverMoves.querySelectorAll('.solver-move');
             spans.forEach((sp, i) => {
                 sp.classList.toggle('played', i < idx);
-                sp.classList.toggle('next', i === idx && eng.stepMode);
+                sp.classList.toggle('next', i === idx && hasMore);
             });
-            // Scroll the upcoming move into view if step-mode is active.
-            if (eng.stepMode && idx < spans.length) {
+            if (hasMore && idx < spans.length) {
                 spans[idx].scrollIntoView({ block: 'nearest', inline: 'center' });
             }
         }
-        // While step-mode is active with a sequence loaded, surface position.
-        if (eng.stepMode && eng.allTokens.length > 0 && this._solverStatus) {
+
+        // Show position while there's an active sequence.
+        if (hasSequence && this._solverStatus) {
             const total = eng.allTokens.length;
             const done = eng.pendingIndex;
             if (done < total) {

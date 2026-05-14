@@ -27,10 +27,10 @@ export class PuzzleEngine {
         this._solving = false;
         this.paintMode = new PaintMode(this);
 
-        // Step mode: when true, solver/pattern results stay in pendingTokens
-        // instead of being dumped into the animation queue, and the user
-        // advances one notation token at a time via playNext().
-        this.stepMode = false;
+        // Solver/pattern results land in pendingTokens; the user advances
+        // through them one notation token at a time with playNext() (or
+        // dumps the remainder into the animation queue with playAll()).
+        // We never auto-play — stepping is the default.
         this.pendingTokens = [];      // remaining notation tokens
         this.pendingIndex = 0;         // index of the next token (within original list)
         this.allTokens = [];           // full original token list (for display)
@@ -185,12 +185,13 @@ export class PuzzleEngine {
 
             const tookS = Math.round((Date.now() - started) / 1000);
             const verb = goTo ? 'Path' : 'Solved';
-            if (this.stepMode) {
-                ui?.setSolverStatus?.(`${verb}: ${moves.length} moves (${tookS}s) — press N or Next ▶`);
+            const n = moves.length;
+            if (n === 0) {
+                ui?.setSolverStatus?.(`${verb}: already there (${tookS}s)`);
             } else {
-                // Auto-play: drain the pending buffer straight into animation.
-                this._flushPending();
-                ui?.setSolverStatus?.(`${verb}: ${moves.length} move${moves.length === 1 ? '' : 's'} (${tookS}s)`);
+                ui?.setSolverStatus?.(
+                    `${verb}: ${n} move${n === 1 ? '' : 's'} (${tookS}s) — N next, B back, Play all to run.`
+                );
             }
         } catch (e) {
             ui?.setSolverStatus?.(`Solver error: ${e.message || e}`);
@@ -218,7 +219,7 @@ export class PuzzleEngine {
     }
 
     /** Drain all remaining pending tokens straight into the animation queue. */
-    _flushPending() {
+    playAll() {
         while (this.pendingTokens.length) this.playNext();
     }
 
@@ -256,17 +257,6 @@ export class PuzzleEngine {
         }
         this.input?.updateStepUI?.();
         return tok;
-    }
-
-    /**
-     * Toggle step-through mode. When set to false with pending moves
-     * remaining, drain them into the animation queue so the cube finishes
-     * the sequence.
-     */
-    setStepMode(active) {
-        this.stepMode = !!active;
-        if (!this.stepMode && this.pendingTokens.length) this._flushPending();
-        this.input?.updateStepUI?.();
     }
 
     /** Drop any pending tokens and reset step UI. */
