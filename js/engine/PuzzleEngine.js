@@ -158,6 +158,22 @@ export class PuzzleEngine {
             return;
         }
 
+        // 3×3 has fixed centers — any state with displaced centers requires
+        // slice moves the standard solver can't produce. Catch it client-side
+        // with a friendly message instead of leaking the solver's error.
+        if (this.config.N === 3) {
+            const centerIdx = [4, 13, 22, 31, 40, 49];
+            const expected = 'URFDLB';
+            const wrong = centerIdx.findIndex((i, k) => encoded.state[i] !== expected[k]);
+            if (wrong >= 0) {
+                ui?.setSolverStatus?.(
+                    'On a 3×3 the centers are fixed — a middle-slice rotation moved one of them, ' +
+                    'so the standard solver can\'t reach this state. Rotate the slice back, or reset.'
+                );
+                return;
+            }
+        }
+
         this._solving = true;
         ui?.clearSolverMoves?.();
         ui?.setSolverStatus?.(goTo ? 'Computing path…' : 'Solving…');
