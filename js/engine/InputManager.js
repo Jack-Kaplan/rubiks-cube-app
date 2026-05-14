@@ -186,7 +186,17 @@ export class InputManager {
             }
             move = { axis: bestAxis, layer: selPiece.m[bestAxis], dir: bestDir };
         }
-        if (move) engine.animation.queueMove(move);
+        if (!move) return;
+        // On 3×3 the centers are fixed by the solver's convention — reject
+        // middle-slice rotations (layer=0) at the source so the user can't
+        // arrow-key the cube into an unsolvable state.
+        if (engine.config.N === 3 && Math.abs(move.layer) < 0.01) {
+            this.setSolverStatus(
+                'On a 3×3 the middle slice is locked — solver assumes fixed centers. Click an edge or corner sticker instead.'
+            );
+            return;
+        }
+        engine.animation.queueMove(move);
     }
 
     _onReset() {

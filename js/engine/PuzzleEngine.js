@@ -158,19 +158,28 @@ export class PuzzleEngine {
             return;
         }
 
-        // 3×3 has fixed centers — any state with displaced centers requires
-        // slice moves the standard solver can't produce. Catch it client-side
-        // with a friendly message instead of leaking the solver's error.
-        if (this.config.N === 3) {
+        // 3×3: kociemba assumes fixed centers, so a state with displaced
+        // centers (e.g., after a middle-slice rotation) makes it choke. But
+        // mathematically E ≡ U D' y up to a whole-cube rotation — i.e., the
+        // state IS reachable by outer-face turns *in a rotated frame*. So
+        // virtually rotate the cube until centers line up with standard
+        // URFDLB, encode that, and send THAT to kociemba. The solver's moves
+        // applied to the original cube produce a uniform-but-rotated solve.
+        let frameNote = '';
+        if (this.config.N === 3 && !targetState) {
             const centerIdx = [4, 13, 22, 31, 40, 49];
-            const expected = 'URFDLB';
-            const wrong = centerIdx.findIndex((i, k) => encoded.state[i] !== expected[k]);
-            if (wrong >= 0) {
-                ui?.setSolverStatus?.(
-                    'On a 3×3 the centers are fixed — a middle-slice rotation moved one of them, ' +
-                    'so the standard solver can\'t reach this state. Rotate the slice back, or reset.'
-                );
-                return;
+            const standard = 'URFDLB';
+            const offIdx = centerIdx.findIndex((i, k) => encoded.state[i] !== standard[k]);
+            if (offIdx >= 0) {
+                const renorm = this._renormalize3x3(this.pieces);
+                if (!renorm) {
+                    ui?.setSolverStatus?.(
+                        'This 3×3 state is fundamentally unreachable by the standard solver.'
+                    );
+                    return;
+                }
+                encoded.state = renorm;
+                frameNote = ' (cube ends solved in a rotated frame)';
             }
         }
 
@@ -204,10 +213,10 @@ export class PuzzleEngine {
             const verb = goTo ? 'Path' : 'Solved';
             const n = moves.length;
             if (n === 0) {
-                ui?.setSolverStatus?.(`${verb}: already there (${tookS}s)`);
+                ui?.setSolverStatus?.(`${verb}: already there (${tookS}s)${frameNote}`);
             } else {
                 ui?.setSolverStatus?.(
-                    `${verb}: ${n} move${n === 1 ? '' : 's'} (${tookS}s) — use Next / Back / Play all.`
+                    `${verb}: ${n} move${n === 1 ? '' : 's'} (${tookS}s)${frameNote} — use Next / Back / Play all.`
                 );
             }
         } catch (e) {
@@ -288,6 +297,65 @@ export class PuzzleEngine {
         }
         this.input?.updateStepUI?.();
         return tok;
+    }
+
+    /**
+     * For 3×3 only: if the current cube has displaced centers (e.g. from a
+     * middle-slice rotation), find a whole-cube rotation that brings the
+     * centers back to URFDLB-standard positions and return the encoded
+     * facelet string in that rotated frame. The kociemba solver can then
+     * accept the state; the solver's outer-face moves applied to the cube
+     * land it in a "solved-but-rotated" configuration (each face uniform,
+     * overall orientation differs from canonical). Returns null if no
+     * orientation works — i.e., the state is genuinely impossible.
+     */
+    _renormalize3x3(pieces) {
+        if (this.config.N !== 3) return null;
+        const centerIdx = [4, 13, 22, 31, 40, 49];
+        const standard = 'URFDLB';
+
+        const clonePieces = (src) => src.map(p => ({
+            m: [...p.m],
+            p: p.p.map(c => [...c]),
+            stickers: p.stickers.map(s => s ? { ...s } : null),
+        }));
+        // Whole-cube rotation: same arithmetic as CubePuzzle.applyRotation
+        // but applied to every piece (not filtered by layer).
+        const wholeRotate = (clone, axis, dir) => {
+            const [a, b] = [0, 1, 2].filter(i => i !== axis);
+            for (const c of clone) {
+                const x = c.m[a], y = c.m[b];
+                c.m[a] = -y * dir;
+                c.m[b] = x * dir;
+                for (const p of c.p) {
+                    const px = p[a], py = p[b];
+                    p[a] = -py * dir;
+                    p[b] = px * dir;
+                }
+            }
+        };
+
+        // The cube rotation group has 24 elements; iterating x,y,z each in
+        // {0..3} quarter-turns covers all of them (with redundancy, which
+        // is harmless — we stop at the first hit).
+        for (let xr = 0; xr < 4; xr++) {
+            for (let yr = 0; yr < 4; yr++) {
+                for (let zr = 0; zr < 4; zr++) {
+                    const clone = clonePieces(pieces);
+                    for (let i = 0; i < xr; i++) wholeRotate(clone, 0, 1);
+                    for (let i = 0; i < yr; i++) wholeRotate(clone, 1, 1);
+                    for (let i = 0; i < zr; i++) wholeRotate(clone, 2, 1);
+                    const enc = encodeFacelet(clone, this.puzzle, this.config);
+                    if (!enc.ok) continue;
+                    let ok = true;
+                    for (let k = 0; k < 6; k++) {
+                        if (enc.state[centerIdx[k]] !== standard[k]) { ok = false; break; }
+                    }
+                    if (ok) return enc.state;
+                }
+            }
+        }
+        return null;
     }
 
     /** Drop any pending tokens and reset step state. */
