@@ -54,12 +54,15 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install -r requirements.txt
 
-# Bake every dwalton76 lookup table into the image. Default: per-file
-# fetch from dwalton76's public S3 bucket. Override TABLES_TARBALL_URL
-# to point at a self-hosted single-tarball mirror — see the README's
-# "Lookup tables" section. The deployed image makes no external calls
-# either way; this only affects where the build pulls from.
-ARG TABLES_TARBALL_URL=""
+# Bake every dwalton76 lookup table into the image. Default source is a
+# self-hosted single-tarball mirror — one HTTP request, ~3 GB on the
+# wire, no dependency on the upstream S3 bucket.
+#
+# Override TABLES_TARBALL_URL="" (empty) to fall back to per-file fetch
+# from dwalton76's public S3 bucket — kept as an emergency bootstrap
+# path if the mirror is ever down. The deployed image makes no external
+# calls either way; this arg only affects where the build pulls from.
+ARG TABLES_TARBALL_URL="https://assets.jack-kaplan.com/projects/rubiks-cube/lookup-tables.tar.gz"
 ARG TABLES_BUCKET_URL="https://rubiks-cube-lookup-tables.s3.amazonaws.com"
 COPY backend/prefetch_tables.sh /tmp/prefetch_tables.sh
 RUN TABLES_TARBALL_URL="${TABLES_TARBALL_URL}" \

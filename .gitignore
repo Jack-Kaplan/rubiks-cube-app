@@ -5,3 +5,5 @@ notes.MD
 # Python
 __pycache__/
 *.py[cod]
+lookup-tables.tar.gz
+.env

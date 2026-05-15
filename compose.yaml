@@ -1,27 +1,47 @@
-# Sample compose file for the cube-solver app.
+# Production compose file for the cube-solver app.
 #
-#   docker compose build      # cold build pulls lookup tables; see README
-#   docker compose up -d
-#   docker compose logs -f
+# Common commands:
+#   docker compose up -d --build      # first run: build then start (~25 min cold)
+#   docker compose up -d              # subsequent runs: just start
+#   docker compose logs -f cube
+#   docker compose restart cube
 #   docker compose down
 #
-# The running container needs no outbound internet. For self-hosting the
-# build-time lookup tables, see README → Solver → Lookup tables.
+# Tunable via environment variables (defaults in parentheses):
+#   HOST_PORT             external port to bind  (8000)
+#   IMAGE_TAG             image tag              (latest)
+#   CONTAINER_NAME        runtime container name (cube-solver)
+#   TABLES_TARBALL_URL    lookup-table mirror    (assets.jack-kaplan.com mirror)
+#                         pass "" to fall back to dwalton76's S3 bucket
+#
+# The deployed container makes no external network calls — lookup tables
+# are baked into the image at build time. See README → Solver → Lookup
+# tables for details on hosting your own mirror.
 
 services:
   cube:
-    build: .
-    image: cube-solver:latest
-    container_name: cube-solver
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TABLES_TARBALL_URL: ${TABLES_TARBALL_URL-https://assets.jack-kaplan.com/projects/rubiks-cube/lookup-tables.tar.gz}
+    image: cube-solver:${IMAGE_TAG:-latest}
+    container_name: ${CONTAINER_NAME:-cube-solver}
     restart: unless-stopped
+    stop_grace_period: 10s
 
-    # HOST_PORT:CONTAINER_PORT — change the left number to expose on
-    # whatever port your reverse proxy / lab gateway expects. The
-    # container always listens on 8000 internally.
     ports:
-      - "8000:8000"
+      - "${HOST_PORT:-8000}:8000"
 
-    # Lightweight health check via the FastAPI /health endpoint.
+    # Cap log file size so a chatty solver run can't fill the disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # FastAPI /health is a no-op JSON endpoint; using urllib so we don't
+    # need curl/wget in the image just for the probe.
     healthcheck:
       test:
         - "CMD"
@@ -31,36 +51,34 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
-    # The solver doesn't write files at runtime — keep the FS read-only.
-    # /tmp stays writable for kociemba's scratch.
+    # The solver doesn't persist anything at runtime. Locking the root FS
+    # read-only catches any accidental writes loudly; /tmp stays writable
+    # for the dwalton76 subprocess's scratch files.
     read_only: true
     tmpfs:
-      - /tmp:size=64M
+      - /tmp:size=128M
 
-    # Drop everything we don't need.
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
 
-    # Optional resource limits. N=11 solves use ~500 MB RAM peak; bump if
-    # you queue many concurrent solves.
+    # Resource ceiling. N=11 solves use ~500 MB RAM peak; raise if you
+    # queue many concurrent requests or expect many simultaneous users.
     deploy:
       resources:
         limits:
-          memory: 2g
+          memory: 2gb
           cpus: "2.0"
+        reservations:
+          memory: 256mb
 
-# Want a paranoid offline guarantee? Drop the `ports:` block above and
-# put the service on an internal-only network — the container will be
-# reachable only to other compose services, with no host port mapping
-# and no internet route:
-#
-#   networks:
-#     - cubenet
-#
-# networks:
-#   cubenet:
-#     internal: true
+    # Uncomment if you front this with Traefik (adjust host + entrypoint).
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.cube.rule=Host(`cube.example.com`)"
+    #   - "traefik.http.routers.cube.entrypoints=websecure"
+    #   - "traefik.http.routers.cube.tls.certresolver=letsencrypt"
+    #   - "traefik.http.services.cube.loadbalancer.server.port=8000"

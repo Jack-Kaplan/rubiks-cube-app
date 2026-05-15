@@ -64,27 +64,23 @@ The N≥4 solver needs roughly 11 GB of precomputed lookup tables. They're
 fetched at build time and baked into the image, so the running container
 makes no external network calls.
 
-By default the build pulls each file from dwalton76's public S3 bucket
-(`rubiks-cube-lookup-tables.s3.amazonaws.com`). That works out of the
-box but adds one external dependency to *future cold builds* — if the
-bucket ever goes away, fresh rebuilds break. The deployed image is not
-affected.
+By default the build pulls a single 3 GB tarball from
+[`assets.jack-kaplan.com/projects/rubiks-cube/lookup-tables.tar.gz`](https://assets.jack-kaplan.com/projects/rubiks-cube/lookup-tables.tar.gz)
+(mirrored from dwalton76's public S3 bucket on Cloudflare R2). One HTTP
+request, one `tar -xz`, done. No upstream dependency.
 
-If you'd rather host the tables yourself, use the optional
-`TABLES_TARBALL_URL` build-arg:
+To host the tables yourself, export from a known-good image and point
+the build at your own URL:
 
 ```bash
-# one-time: export from a known-good image and copy to wherever you serve
-# static files (NAS, internal nginx, S3-compatible store, etc.)
 ./backend/export_tables.sh /path/to/lookup-tables.tar.gz
-
-# future builds pull from your mirror in a single HTTP request
-docker compose build --build-arg TABLES_TARBALL_URL=http://nas.local/lookup-tables.tar.gz
+# put that file on any HTTP-serving box (nginx, NAS, etc.), then:
+docker compose build --build-arg TABLES_TARBALL_URL=https://your.host/lookup-tables.tar.gz
 ```
 
-Without the arg, the build behaves exactly as before. The arg simply
-swaps the source — same files, single tarball instead of 190 per-file
-requests, no external dependency.
+Passing `--build-arg TABLES_TARBALL_URL=""` falls back to per-file fetch
+from dwalton76's public S3 bucket — kept as an emergency bootstrap if
+the default mirror is ever unreachable.
 
 ## Patterns
 
