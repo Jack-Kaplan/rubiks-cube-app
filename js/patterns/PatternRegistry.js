@@ -38,26 +38,31 @@ function applyAlg(N, alg) {
 }
 
 // Per-N concentric-ring color tables. Index k = ring distance from the
-// face's nearest edge (0 = outermost). Each *column* (across faces) is a
-// permutation of FACES so each color appears exactly N² times across the
-// cube. Each *row* is Latin within the rings actually used on that N, so
-// each face shows as many distinct colors as the geometry allows.
+// face's nearest edge (0 = outermost). Each *column* (across faces) is
+// a permutation of FACES so each color appears exactly N² times across
+// the cube. Each *row* is Latin within the rings actually used on that
+// N, AND every entry in those rings is a derangement of the face color
+// — so each face shows the maximum distinct colors the geometry allows:
+// floor(N/2) non-face colors on the rings, plus the face color itself
+// at the absolute center on odd N (forced by the override below).
 //
 // All tables were discovered by an offline parallel search against the
-// dwalton76/kociemba solver pipeline — see scripts/find_bullseye_table.py.
-// The col-0 (outer ring) value is one of the 14 derangement cube
-// rotations (a permutation σ with σ(f) ≠ f for every face, induced by a
-// 3D rotation so the corner color triples are real pieces). The search
-// pre-filters out the 6 edge-axis σ values on odd N because their
-// 3×3 edge permutation parity coupling fails directly through T-edges
-// (no wing partner to absorb the flip); even N's wing orbits do absorb
-// it, which is why even N can use edge-axis σ. Empirically: every even
-// N here uses col 0 = RUBLDF (180° UR-DL edge axis) and every odd N
-// uses col 0 = RFULBD (120° URF-DLB body diagonal).
+// dwalton76/kociemba solver pipeline (see scripts/find_bullseye_table.py).
+// Col 0 is one of the 14 derangement cube rotations — a permutation σ
+// with σ(f) ≠ f for every face, induced by a 3D rotation so the corner
+// color triples at each cube corner are real pieces. The search pre-
+// filters the 6 edge-axis σ values on odd N: their 3×3 edge-parity
+// coupling fails directly through T-edges (single edge piece in the
+// middle of each cube-edge, no wing partner to absorb the flip). On
+// even N the wing orbits do absorb it, which is why even-N tables use
+// col 0 = RUBLDF (180° UR-DL edge axis) while odd-N tables use col 0
+// = RFULBD (120° URF-DLB body diagonal).
 //
-// On odd N the absolute-center sticker is overridden to face color
-// in bullseye() — it sits on the rotation axis and is geometrically
-// fixed, so its table value is unused.
+// Inner columns (col 1..R-1) were filled with derangements of FACES so
+// no face's ring 1..R-1 shows that face's own color, then validated
+// against the backend solver. The absolute-center sticker on odd N is
+// overridden to face color in bullseye() below — its table value is
+// unused, included only to keep every row length 6 for uniform indexing.
 const RING_COLOR_BY_N = {
     3: {
         U: ['R', 'U', 'U', 'U', 'U', 'U'],
@@ -68,68 +73,68 @@ const RING_COLOR_BY_N = {
         B: ['U', 'B', 'B', 'B', 'B', 'B'],
     },
     4: {
-        U: ['R', 'U', 'U', 'U', 'U', 'U'],
-        R: ['U', 'F', 'R', 'R', 'R', 'R'],
-        F: ['B', 'L', 'F', 'F', 'F', 'F'],
-        D: ['L', 'D', 'D', 'D', 'D', 'D'],
-        L: ['D', 'B', 'L', 'L', 'L', 'L'],
-        B: ['F', 'R', 'B', 'B', 'B', 'B'],
+        U: ['R', 'F', 'U', 'U', 'U', 'U'],
+        R: ['U', 'D', 'R', 'R', 'R', 'R'],
+        F: ['B', 'R', 'F', 'F', 'F', 'F'],
+        D: ['L', 'B', 'D', 'D', 'D', 'D'],
+        L: ['D', 'U', 'L', 'L', 'L', 'L'],
+        B: ['F', 'L', 'B', 'B', 'B', 'B'],
     },
     5: {
-        U: ['R', 'U', 'U', 'U', 'U', 'U'],
-        R: ['F', 'R', 'R', 'R', 'R', 'R'],
-        F: ['U', 'F', 'F', 'F', 'F', 'F'],
-        D: ['L', 'D', 'D', 'D', 'D', 'D'],
-        L: ['B', 'L', 'L', 'L', 'L', 'L'],
-        B: ['D', 'B', 'B', 'B', 'B', 'B'],
+        U: ['R', 'F', 'U', 'U', 'U', 'U'],
+        R: ['F', 'U', 'R', 'R', 'R', 'R'],
+        F: ['U', 'R', 'F', 'F', 'F', 'F'],
+        D: ['L', 'B', 'D', 'D', 'D', 'D'],
+        L: ['B', 'D', 'L', 'L', 'L', 'L'],
+        B: ['D', 'L', 'B', 'B', 'B', 'B'],
     },
     6: {
-        U: ['R', 'U', 'D', 'U', 'U', 'U'],
-        R: ['U', 'R', 'F', 'R', 'R', 'R'],
-        F: ['B', 'F', 'R', 'F', 'F', 'F'],
-        D: ['L', 'D', 'U', 'D', 'D', 'D'],
-        L: ['D', 'L', 'B', 'L', 'L', 'L'],
-        B: ['F', 'B', 'L', 'B', 'B', 'B'],
+        U: ['R', 'F', 'D', 'U', 'U', 'U'],
+        R: ['U', 'D', 'F', 'R', 'R', 'R'],
+        F: ['B', 'L', 'R', 'F', 'F', 'F'],
+        D: ['L', 'B', 'U', 'D', 'D', 'D'],
+        L: ['D', 'U', 'B', 'L', 'L', 'L'],
+        B: ['F', 'R', 'L', 'B', 'B', 'B'],
     },
     7: {
-        U: ['R', 'U', 'F', 'U', 'U', 'U'],
-        R: ['F', 'R', 'L', 'R', 'R', 'R'],
-        F: ['U', 'F', 'B', 'F', 'F', 'F'],
-        D: ['L', 'D', 'U', 'D', 'D', 'D'],
-        L: ['B', 'L', 'D', 'L', 'L', 'L'],
-        B: ['D', 'B', 'R', 'B', 'B', 'B'],
+        U: ['R', 'D', 'F', 'U', 'U', 'U'],
+        R: ['F', 'U', 'L', 'R', 'R', 'R'],
+        F: ['U', 'R', 'B', 'F', 'F', 'F'],
+        D: ['L', 'B', 'U', 'D', 'D', 'D'],
+        L: ['B', 'F', 'D', 'L', 'L', 'L'],
+        B: ['D', 'L', 'R', 'B', 'B', 'B'],
     },
     8: {
-        U: ['R', 'U', 'F', 'B', 'U', 'U'],
-        R: ['U', 'R', 'D', 'L', 'R', 'R'],
-        F: ['B', 'F', 'U', 'R', 'F', 'F'],
-        D: ['L', 'D', 'R', 'U', 'D', 'D'],
-        L: ['D', 'L', 'B', 'F', 'L', 'L'],
-        B: ['F', 'B', 'L', 'D', 'B', 'B'],
+        U: ['R', 'D', 'F', 'B', 'U', 'U'],
+        R: ['U', 'F', 'D', 'L', 'R', 'R'],
+        F: ['B', 'L', 'U', 'R', 'F', 'F'],
+        D: ['L', 'B', 'R', 'U', 'D', 'D'],
+        L: ['D', 'U', 'B', 'F', 'L', 'L'],
+        B: ['F', 'R', 'L', 'D', 'B', 'B'],
     },
     9: {
-        U: ['R', 'U', 'F', 'D', 'U', 'U'],
-        R: ['F', 'R', 'U', 'L', 'R', 'R'],
-        F: ['U', 'F', 'R', 'B', 'F', 'F'],
-        D: ['L', 'D', 'B', 'F', 'D', 'D'],
-        L: ['B', 'L', 'D', 'R', 'L', 'L'],
-        B: ['D', 'B', 'L', 'U', 'B', 'B'],
+        U: ['R', 'L', 'F', 'D', 'U', 'U'],
+        R: ['F', 'B', 'U', 'L', 'R', 'R'],
+        F: ['U', 'D', 'R', 'B', 'F', 'F'],
+        D: ['L', 'U', 'B', 'F', 'D', 'D'],
+        L: ['B', 'F', 'D', 'R', 'L', 'L'],
+        B: ['D', 'R', 'L', 'U', 'B', 'B'],
     },
     10: {
-        U: ['R', 'U', 'F', 'L', 'D', 'U'],
-        R: ['U', 'R', 'D', 'F', 'B', 'R'],
-        F: ['B', 'F', 'U', 'R', 'L', 'F'],
-        D: ['L', 'D', 'R', 'B', 'U', 'D'],
-        L: ['D', 'L', 'B', 'U', 'F', 'L'],
-        B: ['F', 'B', 'L', 'D', 'R', 'B'],
+        U: ['R', 'B', 'F', 'L', 'D', 'U'],
+        R: ['U', 'L', 'D', 'F', 'B', 'R'],
+        F: ['B', 'D', 'U', 'R', 'L', 'F'],
+        D: ['L', 'F', 'R', 'B', 'U', 'D'],
+        L: ['D', 'R', 'B', 'U', 'F', 'L'],
+        B: ['F', 'U', 'L', 'D', 'R', 'B'],
     },
     11: {
-        U: ['R', 'U', 'F', 'D', 'L', 'U'],
-        R: ['F', 'R', 'U', 'L', 'B', 'R'],
-        F: ['U', 'F', 'R', 'B', 'D', 'F'],
-        D: ['L', 'D', 'B', 'R', 'U', 'D'],
-        L: ['B', 'L', 'D', 'F', 'R', 'L'],
-        B: ['D', 'B', 'L', 'U', 'F', 'B'],
+        U: ['R', 'B', 'F', 'D', 'L', 'U'],
+        R: ['F', 'D', 'U', 'L', 'B', 'R'],
+        F: ['U', 'L', 'R', 'B', 'D', 'F'],
+        D: ['L', 'F', 'B', 'R', 'U', 'D'],
+        L: ['B', 'U', 'D', 'F', 'R', 'L'],
+        B: ['D', 'R', 'L', 'U', 'F', 'B'],
     },
 };
 
