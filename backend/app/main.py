@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .cache import cache_get, cache_put, init_cache
 from .jobs import JobStore
 from .solver import SolverError, run_solve
 
@@ -28,6 +29,13 @@ app.add_middleware(
 
 store = JobStore()
 
+# Persistent solver-result cache (SQLite on a docker volume). init_cache
+# returns None if the path isn't writable; cache_get/cache_put no-op in
+# that case so the backend still works without caching.
+cache_conn = init_cache(
+    os.environ.get("CACHE_DB_PATH", "/var/cache/cube-solver/cache.db")
+)
+
 
 class SolveRequest(BaseModel):
     N: int = Field(ge=2, le=11)
@@ -47,9 +55,15 @@ class SolveStatus(BaseModel):
 
 async def _worker(job_id: str, n: int, state: str) -> None:
     try:
+        cached = await asyncio.to_thread(cache_get, cache_conn, n, state)
+        if cached is not None:
+            await store.finish(job_id, cached)
+            log.info("job %s cache hit: N=%d, %d moves", job_id, n, len(cached))
+            return
         moves = await run_solve(n, state)
+        await asyncio.to_thread(cache_put, cache_conn, n, state, moves)
         await store.finish(job_id, moves)
-        log.info("job %s done: N=%d, %d moves", job_id, n, len(moves))
+        log.info("job %s done: N=%d, %d moves (cached)", job_id, n, len(moves))
     except SolverError as e:
         await store.fail(job_id, str(e))
         log.warning("job %s failed: %s", job_id, e)

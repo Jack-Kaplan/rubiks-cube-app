@@ -58,6 +58,12 @@ COPY index.html ./static/index.html
 COPY css        ./static/css
 COPY js         ./static/js
 
+# Empty dir for the solver-result SQLite cache. The compose service
+# mounts a named volume here; with the directory present in the image
+# the named volume auto-populates on first deploy without needing
+# additional init logic.
+RUN mkdir -p /var/cache/cube-solver
+
 COPY backend/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 

@@ -2,6 +2,11 @@
 #   HOST_PORT (8000) · IMAGE_TAG (latest) · CONTAINER_NAME (cube-solver)
 #   TABLES_TARBALL_URL (assets.jack-kaplan.com mirror; "" → dwalton76 S3)
 #
+# Optional, only used if the Traefik block below is uncommented:
+#   CUBE_HOST (cube.example.com) — Traefik Host(...) rule
+#   TRAEFIK_ENTRYPOINT (web) · TRAEFIK_AUTH_MIDDLEWARE (authentik@file)
+#   TRAEFIK_PROXY_NETWORK (proxy) — external Docker network Traefik uses
+#
 # First boot on a new host extracts the in-image lookup-table tarball into
 # the named volume (~3 min); subsequent boots are instant. Wipe + re-extract:
 #   docker compose down && docker volume rm rubiks-cube-app_lookup-tables
@@ -18,6 +23,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 10s
 
+    # Direct host-port exposure. Comment out when fronting with Traefik.
     ports:
       - "${HOST_PORT:-8000}:8000"
 
@@ -41,6 +47,7 @@ services:
 
     volumes:
       - lookup-tables:/opt/rubiks-cube-NxNxN-solver/lookup-tables
+      - cube-solver-cache:/var/cache/cube-solver
 
     # Volume mounts override read_only for that path; the rest of the
     # root FS stays read-only, /tmp is tmpfs for dwalton76 scratch files.
@@ -53,6 +60,22 @@ services:
     security_opt:
       - no-new-privileges:true
 
+    # --- Optional: Traefik + authentik front door --------------------------
+    # Uncomment this block (and the matching `proxy_net` network at the
+    # bottom of the file) plus comment out the `ports:` block above. Values
+    # are driven by env vars — see .env.example for the full list.
+    # networks:
+    #   - default
+    #   - proxy_net
+    #
+    # labels:
+    #   - traefik.enable=true
+    #   - traefik.docker.network=${TRAEFIK_PROXY_NETWORK:-proxy}
+    #   - traefik.http.routers.cube.rule=Host(`${CUBE_HOST:-cube.example.com}`)
+    #   - traefik.http.routers.cube.entrypoints=${TRAEFIK_ENTRYPOINT:-web}
+    #   - traefik.http.routers.cube.middlewares=${TRAEFIK_AUTH_MIDDLEWARE:-authentik@file}
+    #   - traefik.http.services.cube.loadbalancer.server.port=8000
+
     # N=11 solves peak around ~500 MB; raise for many concurrent users.
     deploy:
       resources:
@@ -62,13 +85,15 @@ services:
         reservations:
           memory: 256mb
 
-    # Uncomment for Traefik (adjust host).
-    # labels:
-    #   - "traefik.enable=true"
-    #   - "traefik.http.routers.cube.rule=Host(`cube.example.com`)"
-    #   - "traefik.http.routers.cube.entrypoints=websecure"
-    #   - "traefik.http.routers.cube.tls.certresolver=letsencrypt"
-    #   - "traefik.http.services.cube.loadbalancer.server.port=8000"
-
 volumes:
   lookup-tables:
+  cube-solver-cache:
+
+# Only declared when the Traefik block above is in use. Alias `proxy_net`
+# decouples the in-compose key from the actual Docker network name, so
+# TRAEFIK_PROXY_NETWORK can be overridden per install.
+# networks:
+#   default:
+#   proxy_net:
+#     name: ${TRAEFIK_PROXY_NETWORK:-proxy}
+#     external: true
