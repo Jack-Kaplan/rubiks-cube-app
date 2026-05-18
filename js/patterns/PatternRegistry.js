@@ -3,12 +3,13 @@
  * (or null if unsupported on that N). The state is fed straight into
  * `engine.goToState(target)`.
  *
- * Reachability constraint: the N=3 path uses kociemba, which only does
- * outer-face turns and cannot move centers. So bullseye/checkerboard/dots
- * — which all need center swaps on 3×3 — are restricted to N≥4 (where
- * dwalton76's reduction solver moves centers natively). The 3×3 presets
- * (cube-in-cube, pi) are derived by applying outer-turn-only canonical
- * algorithms to a fresh solved cube and encoding the result.
+ * Bullseye now covers N=3..11. The N=3 case fits kociemba because the
+ * bullseye state keeps centers face-colored (the absolute center on odd
+ * N is forced to face color, and the outer ring is a derangement-rotation
+ * of FACES that produces a kociemba-reachable corner+edge configuration).
+ * Dots is still N=4-only. The remaining 3×3-only presets (cube-in-cube,
+ * pi) are derived by applying canonical outer-turn algorithms to a fresh
+ * solved cube and encoding the result.
  */
 
 import { CubePuzzle } from '../puzzles/cube/CubePuzzle.js';
@@ -36,29 +37,105 @@ function applyAlg(N, alg) {
     return enc.ok ? enc.state : null;
 }
 
-// Concentric-ring color tables. Index k = ring distance from the face's
-// nearest edge (0 = outermost, max = innermost). Each row is a permutation
-// of the 6 face colors so the per-color totals across the whole cube come
-// out to N² each — required for a valid cube state. Row 0 is the identity
-// because corner/edge orientation constraints force the outer ring of each
-// face to be the face's own color.
-const RING_COLOR = {
-    U: ['U', 'F', 'R', 'D', 'B', 'L'],
-    R: ['R', 'U', 'F', 'L', 'D', 'B'],
-    F: ['F', 'R', 'U', 'B', 'L', 'D'],
-    D: ['D', 'B', 'L', 'U', 'F', 'R'],
-    L: ['L', 'D', 'B', 'R', 'U', 'F'],
-    B: ['B', 'L', 'D', 'F', 'R', 'U'],
+// Per-N concentric-ring color tables. Index k = ring distance from the
+// face's nearest edge (0 = outermost). Each *column* (across faces) is a
+// permutation of FACES so each color appears exactly N² times across the
+// cube. Each *row* is Latin within the rings actually used on that N, so
+// each face shows as many distinct colors as the geometry allows.
+//
+// All tables were discovered by an offline parallel search against the
+// dwalton76/kociemba solver pipeline — see scripts/find_bullseye_table.py.
+// The col-0 (outer ring) value is one of the 14 derangement cube
+// rotations (a permutation σ with σ(f) ≠ f for every face, induced by a
+// 3D rotation so the corner color triples are real pieces). The search
+// pre-filters out the 6 edge-axis σ values on odd N because their
+// 3×3 edge permutation parity coupling fails directly through T-edges
+// (no wing partner to absorb the flip); even N's wing orbits do absorb
+// it, which is why even N can use edge-axis σ. Empirically: every even
+// N here uses col 0 = RUBLDF (180° UR-DL edge axis) and every odd N
+// uses col 0 = RFULBD (120° URF-DLB body diagonal).
+//
+// On odd N the absolute-center sticker is overridden to face color
+// in bullseye() — it sits on the rotation axis and is geometrically
+// fixed, so its table value is unused.
+const RING_COLOR_BY_N = {
+    3: {
+        U: ['R', 'U', 'U', 'U', 'U', 'U'],
+        R: ['B', 'R', 'R', 'R', 'R', 'R'],
+        F: ['D', 'F', 'F', 'F', 'F', 'F'],
+        D: ['L', 'D', 'D', 'D', 'D', 'D'],
+        L: ['F', 'L', 'L', 'L', 'L', 'L'],
+        B: ['U', 'B', 'B', 'B', 'B', 'B'],
+    },
+    4: {
+        U: ['R', 'U', 'U', 'U', 'U', 'U'],
+        R: ['U', 'F', 'R', 'R', 'R', 'R'],
+        F: ['B', 'L', 'F', 'F', 'F', 'F'],
+        D: ['L', 'D', 'D', 'D', 'D', 'D'],
+        L: ['D', 'B', 'L', 'L', 'L', 'L'],
+        B: ['F', 'R', 'B', 'B', 'B', 'B'],
+    },
+    5: {
+        U: ['R', 'U', 'U', 'U', 'U', 'U'],
+        R: ['F', 'R', 'R', 'R', 'R', 'R'],
+        F: ['U', 'F', 'F', 'F', 'F', 'F'],
+        D: ['L', 'D', 'D', 'D', 'D', 'D'],
+        L: ['B', 'L', 'L', 'L', 'L', 'L'],
+        B: ['D', 'B', 'B', 'B', 'B', 'B'],
+    },
+    6: {
+        U: ['R', 'U', 'D', 'U', 'U', 'U'],
+        R: ['U', 'R', 'F', 'R', 'R', 'R'],
+        F: ['B', 'F', 'R', 'F', 'F', 'F'],
+        D: ['L', 'D', 'U', 'D', 'D', 'D'],
+        L: ['D', 'L', 'B', 'L', 'L', 'L'],
+        B: ['F', 'B', 'L', 'B', 'B', 'B'],
+    },
+    7: {
+        U: ['R', 'U', 'F', 'U', 'U', 'U'],
+        R: ['F', 'R', 'L', 'R', 'R', 'R'],
+        F: ['U', 'F', 'B', 'F', 'F', 'F'],
+        D: ['L', 'D', 'U', 'D', 'D', 'D'],
+        L: ['B', 'L', 'D', 'L', 'L', 'L'],
+        B: ['D', 'B', 'R', 'B', 'B', 'B'],
+    },
+    8: {
+        U: ['R', 'U', 'F', 'B', 'U', 'U'],
+        R: ['U', 'R', 'D', 'L', 'R', 'R'],
+        F: ['B', 'F', 'U', 'R', 'F', 'F'],
+        D: ['L', 'D', 'R', 'U', 'D', 'D'],
+        L: ['D', 'L', 'B', 'F', 'L', 'L'],
+        B: ['F', 'B', 'L', 'D', 'B', 'B'],
+    },
+    9: {
+        U: ['R', 'U', 'F', 'D', 'U', 'U'],
+        R: ['F', 'R', 'U', 'L', 'R', 'R'],
+        F: ['U', 'F', 'R', 'B', 'F', 'F'],
+        D: ['L', 'D', 'B', 'F', 'D', 'D'],
+        L: ['B', 'L', 'D', 'R', 'L', 'L'],
+        B: ['D', 'B', 'L', 'U', 'B', 'B'],
+    },
+    10: {
+        U: ['R', 'U', 'F', 'L', 'D', 'U'],
+        R: ['U', 'R', 'D', 'F', 'B', 'R'],
+        F: ['B', 'F', 'U', 'R', 'L', 'F'],
+        D: ['L', 'D', 'R', 'B', 'U', 'D'],
+        L: ['D', 'L', 'B', 'U', 'F', 'L'],
+        B: ['F', 'B', 'L', 'D', 'R', 'B'],
+    },
+    11: {
+        U: ['R', 'U', 'F', 'D', 'L', 'U'],
+        R: ['F', 'R', 'U', 'L', 'B', 'R'],
+        F: ['U', 'F', 'R', 'B', 'D', 'F'],
+        D: ['L', 'D', 'B', 'R', 'U', 'D'],
+        L: ['B', 'L', 'D', 'F', 'R', 'L'],
+        B: ['D', 'B', 'L', 'U', 'F', 'B'],
+    },
 };
 
 function bullseye(N) {
-    // Concentric rings of different colors. Constraints:
-    //   - Outer ring (k=0) must be face color (corner/edge orientations
-    //     can't show non-face colors on the outermost row/column).
-    //   - On odd N, the single absolute-center sticker is geometrically
-    //     fixed to the face color (it sits on the rotation axis).
-    // So odd N gives max (floor((N−1)/2)) distinct ring colors per face;
-    // even N can use one more, since there's no fixed absolute center.
+    const table = RING_COLOR_BY_N[N];
+    if (!table) return null;
     const mid = (N - 1) / 2;
     const isOdd = N % 2 === 1;
     let out = '';
@@ -66,7 +143,7 @@ function bullseye(N) {
         for (let r = 0; r < N; r++) {
             for (let c = 0; c < N; c++) {
                 const ring = Math.min(r, N - 1 - r, c, N - 1 - c);
-                let color = RING_COLOR[f][ring];
+                let color = table[f][ring];
                 if (isOdd && r === mid && c === mid) color = f;
                 out += color;
             }
@@ -97,13 +174,9 @@ function dots(N) {
 const CUBE_IN_CUBE_ALG = "F L F U' R U F2 L2 U' L' B D' B' L2 U";
 const PI_ALG = "R U2 R2 F R F' U2 R' F R F'";
 
-// N ranges below are empirically verified against the running solver.
-// Big-cube center orbits and parity constraints make some "obvious"
-// pattern definitions unreachable. N=6 is the one big-cube gap; the
-// 2x2 innermost centers on N=6 hit a center-orbit parity conflict with
-// our chosen ring permutation and dwalton76 rejects with "we should
-// not be here". Every other size N=4..11 (except 6) works.
-const BULLSEYE_NS = new Set([4, 5, 7, 8, 9, 10, 11]);
+// Bullseye is supported on every N covered by RING_COLOR_BY_N — each
+// entry there was verified end-to-end against the solver backend.
+const BULLSEYE_NS = new Set(Object.keys(RING_COLOR_BY_N).map(Number));
 const DOTS_NS    = new Set([4]);
 
 export const PATTERNS = [
