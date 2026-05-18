@@ -1,16 +1,6 @@
-/**
- * Paint mode: when active, sticker clicks cycle that sticker's color
- * through the 6 face colors instead of selecting it for arrow-key turns.
- *
- * The mutation target is the piece's stored `stickers[i].faceId`. With
- * the encoder/renderer alignment fix in `CubePuzzle.getStickerColor`,
- * that field is the source of truth for both display (`Renderer3D`) and
- * solver encoding (`encodeFacelet`), so paint changes flow through to
- * `engine.goToState(state)` without any parallel state structure.
- *
- * Entering paint mode resets the cube to solved — painting on a scrambled
- * cube is too confusing to be useful.
- */
+// Mutates piece.stickers[i].faceId — the source of truth for both
+// Renderer3D display and encodeFacelet output, so painted changes flow
+// straight through to engine.goToState(state).
 
 export class PaintMode {
     constructor(engine) {
@@ -33,11 +23,6 @@ export class PaintMode {
         else this.enter();
     }
 
-    /**
-     * Paint the sticker at `hit` with the given face color id (0..5).
-     * Called from the InputManager's 3D/2D click handlers when paint mode
-     * is active. `hit` shape: `{ faceIndex, faceAxis, m, from }`.
-     */
     applyColorAt(hit, colorId) {
         if (!this.active || !hit) return;
         const piece = this.engine.puzzle.findPieceAt(this.engine.pieces, hit.m);

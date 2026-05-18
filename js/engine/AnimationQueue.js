@@ -1,19 +1,13 @@
 import { ease } from './math.js';
 
-/**
- * Generic move animation queue. Manages a FIFO queue of moves,
- * processes one at a time with configurable easing and duration.
- */
 export class AnimationQueue {
     constructor() {
         this.queue = [];
         this.current = null;
         this.moveStart = 0;
         this.moveDuration = 300;
-        // Monotonic counter incremented every time a move finishes (progress
-        // reaches 1 and applyRotation runs). The PuzzleEngine uses this to
-        // drive its step counter — robust against the same move object
-        // appearing more than once in the queue.
+        // Monotonic; survives clear() so PuzzleEngine can detect completions
+        // even when the same move object appears multiple times in the queue.
         this.completedCount = 0;
     }
 
@@ -21,11 +15,6 @@ export class AnimationQueue {
         this.queue.push(move);
     }
 
-    /**
-     * Advance animation state. Call once per frame.
-     * When a move completes, calls puzzle.applyRotation(pieces, move).
-     * @returns {{ current: Object|null, progress: number }}
-     */
     update(time, puzzle, pieces) {
         let progress = 0;
         if (this.current) {
@@ -48,8 +37,6 @@ export class AnimationQueue {
     clear() {
         this.queue = [];
         this.current = null;
-        // completedCount intentionally not reset — it's monotonic so the
-        // engine can take snapshots across clears without losing track.
     }
 
     setSpeed(duration) {

@@ -1,15 +1,6 @@
-"""Cube solver dispatch.
-
-N=3:    uses the PyPI `kociemba` package directly (the dwalton76 solver's
-        3x3 path is broken in current master — it generates parity-error
-        states that its bundled Kociemba implementation cannot solve, even
-        for cubes its own RubiksCube333 class produced).
-N!=3:   shells out to `rubiks-cube-solver.py --state <facelet>` from the
-        dwalton76/rubiks-cube-NxNxN-solver repo and parses the "Solution:"
-        line from stdout.
-
-Both paths return a list of standard-notation move tokens.
-"""
+# N=3 uses kociemba directly — dwalton76's 3x3 path on current master is
+# broken (generates parity errors its bundled kociemba can't solve, even
+# on states its own RubiksCube333 produced). N≠3 shells out to dwalton76.
 
 import asyncio
 import os
@@ -18,21 +9,49 @@ import shlex
 
 import kociemba
 
-# Default CLI location matches what the Dockerfile installs.
 SOLVER_BIN = os.environ.get(
     "SOLVER_BIN", "/opt/rubiks-cube-NxNxN-solver/rubiks-cube-solver.py"
 )
 
-# Per-N timeouts (seconds). Big cubes legitimately take a long time.
 DEFAULT_TIMEOUTS = {
     2: 30, 3: 30, 4: 60, 5: 90, 6: 180,
     7: 240, 8: 300, 9: 360, 10: 480, 11: 600,
 }
 
-# The solver prints its move sequence on a line that looks like:
-#   "Solution: U R' Uw 3Fw' ..."
-# Older builds use "solution" lowercase; match both.
 _SOLUTION_LINE = re.compile(r"^\s*solution[:\s]+(.+)$", re.IGNORECASE)
+
+# dwalton76 colorizes stderr unconditionally; strip before surfacing.
+_ANSI = re.compile(r"\x1b\[[0-9;]*[mK]")
+
+
+def _strip_ansi(s: str) -> str:
+    return _ANSI.sub("", s)
+
+
+# Signatures emitted when handed an invalid cube state (corner/edge
+# orientation, permutation parity, or center-orbit violations). Each
+# arises from a different reduction step; we translate any of them to
+# one friendly message instead of dumping the stack trace.
+_UNREACHABLE_PATTERNS = (
+    re.compile(r"not found in lookup-tables/"),
+    re.compile(r"we should not be here", re.IGNORECASE),
+    re.compile(r"parity error made kociemba barf"),
+    re.compile(r"Probably cubestring is invalid"),
+)
+
+
+def _friendly_dwalton76_error(stderr: str, n: int) -> str | None:
+    plain = _strip_ansi(stderr)
+    for pat in _UNREACHABLE_PATTERNS:
+        if pat.search(plain):
+            return (
+                f"Cube state appears invalid or unreachable on N={n}. "
+                "If you painted this by hand, some configurations are "
+                "physically impossible — parity, edge/corner orientation, "
+                "or center-orbit constraints. Try a real scramble or a "
+                "reachable target."
+            )
+    return None
 
 
 class SolverError(RuntimeError):
@@ -47,7 +66,6 @@ def validate_state(n: int, state: str) -> None:
         )
     if not all(c in "URFDLB" for c in state):
         raise SolverError("State must contain only U/R/F/D/L/B characters")
-    # Each face color must appear exactly N^2 times.
     counts = {f: state.count(f) for f in "URFDLB"}
     if any(c != n * n for c in counts.values()):
         raise SolverError(f"Face color counts {counts} are not all {n * n}")
@@ -55,9 +73,7 @@ def validate_state(n: int, state: str) -> None:
 
 async def run_solve(n: int, state: str) -> list[str]:
     validate_state(n, state)
-    # Short-circuit: kociemba doesn't recognize an already-solved state and
-    # will return a 13-move no-op; skip that explicitly so the user doesn't
-    # see pointless animation when "Go" is pressed on a solved cube.
+    # kociemba returns a 13-move no-op on solved input; short-circuit.
     solved = "".join(c * (n * n) for c in "URFDLB")
     if state == solved:
         return []
@@ -77,7 +93,6 @@ async def _solve_kociemba(state: str) -> list[str]:
 
 async def _solve_dwalton76(n: int, state: str) -> list[str]:
     timeout = DEFAULT_TIMEOUTS.get(n, 600)
-    # Always invoke via python3 to avoid shebang issues across environments.
     # CWD must be the solver repo dir — its `www_header` does a relative
     # shutil.copy("www/solution.js", ...) call that fails otherwise.
     cmd = ["python3", os.path.basename(SOLVER_BIN), "--state", state]
@@ -104,13 +119,15 @@ async def _solve_dwalton76(n: int, state: str) -> list[str]:
     stderr = stderr_b.decode("utf-8", "replace")
 
     if proc.returncode != 0:
+        friendly = _friendly_dwalton76_error(stderr, n)
+        if friendly:
+            raise SolverError(friendly)
         raise SolverError(
             f"Solver exited with code {proc.returncode}\n"
             f"cmd: {shlex.join(cmd[:1])} --state <{len(state)} chars>\n"
-            f"stderr (tail): {stderr[-2000:]}"
+            f"stderr (tail): {_strip_ansi(stderr)[-2000:]}"
         )
 
-    # Scan from the bottom — the final solution line is what we want.
     for line in reversed(stdout.splitlines()):
         m = _SOLUTION_LINE.match(line)
         if m:

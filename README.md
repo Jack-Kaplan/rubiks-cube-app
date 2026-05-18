@@ -60,14 +60,17 @@ with polling — large cubes (N≥8) can take a minute or more.
 
 ### Lookup tables
 
-The N≥4 solver needs roughly 11 GB of precomputed lookup tables. They're
-fetched at build time and baked into the image, so the running container
-makes no external network calls.
+The N≥4 solver needs roughly 11 GB of precomputed lookup tables. The
+~3 GB compressed tarball is fetched at build time and baked into the
+image; on first container start, the entrypoint extracts it into a
+Docker named volume (~3 min, one-time per host). Subsequent starts are
+instant, and the running container makes no external network calls —
+extraction reads from the in-image tarball.
 
-By default the build pulls a single 3 GB tarball from
+By default the build pulls the tarball from
 [`assets.jack-kaplan.com/projects/rubiks-cube/lookup-tables.tar.gz`](https://assets.jack-kaplan.com/projects/rubiks-cube/lookup-tables.tar.gz)
 (mirrored from dwalton76's public S3 bucket on Cloudflare R2). One HTTP
-request, one `tar -xz`, done. No upstream dependency.
+request at build time, no upstream dependency at deploy.
 
 To host the tables yourself, export from a known-good image and point
 the build at your own URL:
@@ -80,7 +83,16 @@ docker compose build --build-arg TABLES_TARBALL_URL=https://your.host/lookup-tab
 
 Passing `--build-arg TABLES_TARBALL_URL=""` falls back to per-file fetch
 from dwalton76's public S3 bucket — kept as an emergency bootstrap if
-the default mirror is ever unreachable.
+the default mirror is ever unreachable. The result is bundled into the
+same in-image tarball, so runtime behavior is identical.
+
+To force re-extraction after refreshing the tarball in a new image:
+
+```bash
+docker compose down
+docker volume rm rubiks-cube-app_lookup-tables
+docker compose up -d
+```
 
 ## Patterns
 

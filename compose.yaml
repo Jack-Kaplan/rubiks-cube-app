@@ -1,22 +1,10 @@
-# Production compose file for the cube-solver app.
+# Env vars (defaults in parens):
+#   HOST_PORT (8000) · IMAGE_TAG (latest) · CONTAINER_NAME (cube-solver)
+#   TABLES_TARBALL_URL (assets.jack-kaplan.com mirror; "" → dwalton76 S3)
 #
-# Common commands:
-#   docker compose up -d --build      # first run: build then start (~25 min cold)
-#   docker compose up -d              # subsequent runs: just start
-#   docker compose logs -f cube
-#   docker compose restart cube
-#   docker compose down
-#
-# Tunable via environment variables (defaults in parentheses):
-#   HOST_PORT             external port to bind  (8000)
-#   IMAGE_TAG             image tag              (latest)
-#   CONTAINER_NAME        runtime container name (cube-solver)
-#   TABLES_TARBALL_URL    lookup-table mirror    (assets.jack-kaplan.com mirror)
-#                         pass "" to fall back to dwalton76's S3 bucket
-#
-# The deployed container makes no external network calls — lookup tables
-# are baked into the image at build time. See README → Solver → Lookup
-# tables for details on hosting your own mirror.
+# First boot on a new host extracts the in-image lookup-table tarball into
+# the named volume (~3 min); subsequent boots are instant. Wipe + re-extract:
+#   docker compose down && docker volume rm rubiks-cube-app_lookup-tables
 
 services:
   cube:
@@ -33,15 +21,13 @@ services:
     ports:
       - "${HOST_PORT:-8000}:8000"
 
-    # Cap log file size so a chatty solver run can't fill the disk.
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
 
-    # FastAPI /health is a no-op JSON endpoint; using urllib so we don't
-    # need curl/wget in the image just for the probe.
+    # start_period covers first-boot tarball extraction before uvicorn binds.
     healthcheck:
       test:
         - "CMD"
@@ -51,11 +37,13 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 240s
 
-    # The solver doesn't persist anything at runtime. Locking the root FS
-    # read-only catches any accidental writes loudly; /tmp stays writable
-    # for the dwalton76 subprocess's scratch files.
+    volumes:
+      - lookup-tables:/opt/rubiks-cube-NxNxN-solver/lookup-tables
+
+    # Volume mounts override read_only for that path; the rest of the
+    # root FS stays read-only, /tmp is tmpfs for dwalton76 scratch files.
     read_only: true
     tmpfs:
       - /tmp:size=128M
@@ -65,8 +53,7 @@ services:
     security_opt:
       - no-new-privileges:true
 
-    # Resource ceiling. N=11 solves use ~500 MB RAM peak; raise if you
-    # queue many concurrent requests or expect many simultaneous users.
+    # N=11 solves peak around ~500 MB; raise for many concurrent users.
     deploy:
       resources:
         limits:
@@ -75,10 +62,13 @@ services:
         reservations:
           memory: 256mb
 
-    # Uncomment if you front this with Traefik (adjust host + entrypoint).
+    # Uncomment for Traefik (adjust host).
     # labels:
     #   - "traefik.enable=true"
     #   - "traefik.http.routers.cube.rule=Host(`cube.example.com`)"
     #   - "traefik.http.routers.cube.entrypoints=websecure"
     #   - "traefik.http.routers.cube.tls.certresolver=letsencrypt"
     #   - "traefik.http.services.cube.loadbalancer.server.port=8000"
+
+volumes:
+  lookup-tables:

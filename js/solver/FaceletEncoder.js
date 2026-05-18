@@ -1,43 +1,18 @@
-/**
- * Encode the engine's piece state into a URFDLB facelet string
- * (the format dwalton76/rubiks-cube-NxNxN-solver expects on --state).
- *
- * Engine coordinate system (from CubeConstants.js):
- *   axis 0 = X, -half = Left  / +half = Right
- *   axis 1 = Y, -half = Top   / +half = Bottom   (Y is inverted)
- *   axis 2 = Z, -half = Back  / +half = Front
- *
- * Engine face id → URFDLB letter:
- *   0 (Y- top, Yellow) → U
- *   1 (Y+ bot, Red)    → D
- *   2 (X- left, Green) → L
- *   3 (X+ right, Cyan) → R
- *   4 (Z+ front, Pink) → F
- *   5 (Z- back, Blue)  → B
- *
- * URFDLB reading order (Kociemba convention) per face:
- *   For each face, look at it from outside. Row 0 is the top of the reading
- *   frame; col 0 is the left. Faces are walked U, R, F, D, L, B; each face
- *   contributes N*N characters in row-major order.
- *
- *   Face | reading-up        | reading-right
- *   U    | toward Back (Z-)  | toward Right (X+)
- *   R    | toward Top  (Y-)  | toward Back  (Z-)
- *   F    | toward Top  (Y-)  | toward Right (X+)
- *   D    | toward Front(Z+)  | toward Right (X+)
- *   L    | toward Top  (Y-)  | toward Front (Z+)
- *   B    | toward Top  (Y-)  | toward Left  (X-)
- */
+// Encode engine state → URFDLB facelet string (Kociemba convention).
+//
+// Engine face id → URFDLB letter:
+//   0 (Y- top) U   1 (Y+ bot) D   2 (X- left) L
+//   3 (X+ right) R 4 (Z+ front) F 5 (Z- back) B
+//
+// Note: engine Y axis is inverted (-Y is up).
 
 import { FACE_INFO } from '../puzzles/cube/CubeConstants.js';
 
-// Engine face id (0..5) → URFDLB letter.
 const ENGINE_TO_LETTER = ['U', 'D', 'L', 'R', 'F', 'B'];
 
-// Per URFDLB face letter, how to walk its N*N grid in reading order.
-// fixedAxis/fixedDir locks the face plane; rowAxis/colAxis with their signs
-// determine the row-major traversal. Coord at index i along an axis with
-// sign s and half h is:  s * (i - h).
+// Per face, how to walk its N×N grid in row-major reading order.
+// fixedAxis/fixedDir locks the face plane; rowAxis/rowSign + colAxis/colSign
+// drive the traversal. Coord at index i with sign s and half h: s*(i-h).
 const FACE_LAYOUT = {
     U: { engineFace: 0, fixedAxis: 1, fixedDir: -1, rowAxis: 2, rowSign: +1, colAxis: 0, colSign: +1 },
     R: { engineFace: 3, fixedAxis: 0, fixedDir: +1, rowAxis: 1, rowSign: +1, colAxis: 2, colSign: -1 },
@@ -53,22 +28,13 @@ function keyForCoord(coord) {
     return `${coord[0].toFixed(4)},${coord[1].toFixed(4)},${coord[2].toFixed(4)}`;
 }
 
-/**
- * Build a Map keyed by stringified piece position → piece.
- * Uses fixed-precision strings to avoid -0/0 float weirdness across rotations.
- */
+// Fixed-precision string keys avoid -0/0 float weirdness across rotations.
 function indexByPosition(pieces) {
     const map = new Map();
     for (const piece of pieces) map.set(keyForCoord(piece.m), piece);
     return map;
 }
 
-/**
- * Encode `pieces` to a URFDLB facelet string of length 6*N*N.
- * Returns null with a reason if the cube is incomplete (e.g., shell holes
- * from a non-solid border) — the solver requires every surface position
- * to be populated.
- */
 export function encodeFacelet(pieces, puzzle, config) {
     const { N } = config;
     const half = (N - 1) / 2;
@@ -108,6 +74,4 @@ export function encodeFacelet(pieces, puzzle, config) {
     return { ok: true, state: out.join('') };
 }
 
-// Re-exported so callers can sanity-check what the engine emitted without
-// duplicating the URFDLB face-ordering knowledge.
 export { FACE_ORDER, ENGINE_TO_LETTER, FACE_LAYOUT };

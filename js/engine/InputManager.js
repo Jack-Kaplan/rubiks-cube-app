@@ -8,15 +8,10 @@ function resolveMax(param, config) {
     return typeof param.max === 'function' ? param.max(config) : param.max;
 }
 
-/**
- * Generic input manager. Handles keyboard, mouse drag, click selection,
- * and dynamically generated config UI. Delegates puzzle-specific move
- * resolution to the PuzzleDefinition interface.
- */
 export class InputManager {
     constructor(engine) {
         this.engine = engine;
-        this.selected = null;  // kept for Renderer3D compatibility; never set
+        this.selected = null;
         this.dragging = false;
         this.dragStartX = 0;
         this.dragStartY = 0;
@@ -24,7 +19,6 @@ export class InputManager {
     }
 
     bind(canvas3d, canvas2d) {
-        // --- Speed slider ---
         const speedSlider = document.getElementById('speed');
         if (speedSlider) {
             speedSlider.value = speedToSlider(this.engine.animation.moveDuration);
@@ -34,7 +28,6 @@ export class InputManager {
         }
         this._speedSlider = speedSlider;
 
-        // --- Solver status / move list ---
         this._solverStatus = document.getElementById('solver-status');
         this._solverMoves = document.getElementById('solver-moves');
         this._scrambleBtn = document.getElementById('scramble-btn');
@@ -60,7 +53,6 @@ export class InputManager {
         if (this._stepSkipBack) this._stepSkipBack.addEventListener('click', () => this.engine.skipToStart());
         this.updateStepUI();
 
-        // --- Patterns panel ---
         this._patternSelect = document.getElementById('pattern-select');
         this._paintToggle = document.getElementById('paint-toggle');
         this._patternGo = document.getElementById('pattern-go');
@@ -70,7 +62,7 @@ export class InputManager {
         this._refreshPatternOptions();
         if (this._patternSelect) {
             this._patternSelect.addEventListener('change', () => {
-                // Exit paint mode if a preset is picked — they're mutually exclusive.
+                // Preset and paint mode are mutually exclusive.
                 if (this.engine.paintMode.active && this._patternSelect.value) {
                     this.engine.paintMode.exit();
                     this._updatePaintToggleUI();
@@ -92,8 +84,6 @@ export class InputManager {
             this._patternGo.addEventListener('click', () => this._onPatternGo());
         }
 
-        // --- 2D view toggle ---
-        // Hidden by default; user expands via the title-row button.
         this._toggle2d = document.getElementById('toggle-2d');
         this._panel2d  = document.getElementById('trefoil-panel');
         if (this._panel2d) this._panel2d.style.display = 'none';
@@ -106,7 +96,6 @@ export class InputManager {
             });
         }
 
-        // --- 3D mouse drag ---
         canvas3d.addEventListener('mousedown', (e) => {
             this.dragging = true;
             this.dragMoved = false;
@@ -128,7 +117,6 @@ export class InputManager {
 
         window.addEventListener('mouseup', () => { this.dragging = false; });
 
-        // --- 3D click selection ---
         canvas3d.addEventListener('click', (e) => {
             if (this.dragMoved) return;
             const rect = canvas3d.getBoundingClientRect();
@@ -144,7 +132,6 @@ export class InputManager {
             this.selected = hit;
         });
 
-        // --- 2D click selection (paint mode + sticker selection for arrows) ---
         if (canvas2d) {
             canvas2d.addEventListener('click', (e) => {
                 if (!this.engine.view2d) return;
@@ -160,10 +147,8 @@ export class InputManager {
             });
         }
 
-        // --- Arrow-key rotation of the selected sticker's layer ---
-        // The only keyboard handler we keep: a sticker has to be clicked
-        // first (mouse-driven), so this is a hybrid interaction, not a
-        // standalone shortcut.
+        // Arrow keys rotate the layer of the clicked sticker — hybrid
+        // mouse-driven, not a standalone keyboard shortcut.
         document.addEventListener('keydown', (e) => this._onArrowKey(e));
     }
 
@@ -206,9 +191,8 @@ export class InputManager {
             move = { axis: bestAxis, layer: selPiece.m[bestAxis], dir: bestDir };
         }
         if (!move) return;
-        // On 3×3 the centers are fixed by the solver's convention — reject
-        // middle-slice rotations (layer=0) at the source so the user can't
-        // arrow-key the cube into an unsolvable state.
+        // 3×3 solver assumes fixed centers — reject middle-slice rotations
+        // at the source so we can't arrow-key into an unsolvable state.
         if (engine.config.N === 3 && Math.abs(move.layer) < 0.01) {
             this.setSolverStatus(
                 'On a 3×3 the middle slice is locked — solver assumes fixed centers. Click an edge or corner sticker instead.'
@@ -248,7 +232,6 @@ export class InputManager {
             }
             sel.appendChild(opt);
         }
-        // Preserve previous selection if still valid.
         if (previous && [...sel.options].some(o => o.value === previous && !o.disabled)) {
             sel.value = previous;
         }
@@ -267,7 +250,6 @@ export class InputManager {
         if (!this._paintPalette) return;
         const colors = this.engine.puzzle?.colors;
         if (!colors) return;
-        // Clear any prior swatches (keep the static label).
         this._paintPalette.querySelectorAll('.paint-swatch').forEach(el => el.remove());
         for (let i = 0; i < 6; i++) {
             const sw = document.createElement('button');
@@ -296,8 +278,6 @@ export class InputManager {
         const engine = this.engine;
         let target = null;
         if (engine.paintMode.active) {
-            // Encode the painted cube state directly. getStickerColor honors
-            // stickers[i].faceId, so paint changes flow through.
             const enc = encodeFacelet(engine.pieces, engine.puzzle, engine.config);
             if (!enc.ok) {
                 this.setSolverStatus(enc.reason || 'Painted cube has missing pieces.');
@@ -327,10 +307,6 @@ export class InputManager {
         await engine.goToState(target);
     }
 
-    /**
-     * Set up puzzle-specific config UI based on puzzle.configParams.
-     * Populates the #puzzle-config container in the DOM.
-     */
     setupConfigUI(puzzle, config) {
         const container = document.getElementById('puzzle-config');
         if (!container) return;
@@ -408,14 +384,8 @@ export class InputManager {
         this.updateStepUI();
     }
 
-    /**
-     * Refresh the step controls + tape highlight. The "head" position
-     * mirrors what the cube is actually doing: during a forward op it's
-     * the token being played; during a back op it's the token being
-     * undone; while idle it's the next-up token. Called from the engine
-     * after every animation move-boundary transition, so the counter
-     * advances live with playback.
-     */
+    // Head position mirrors what the cube is doing: during an op it's the
+    // token being played/undone; idle, it's the next-up token.
     updateStepUI() {
         const eng = this.engine;
         const op = eng._currentOp;
@@ -426,11 +396,6 @@ export class InputManager {
         const moreAhead = eng.pendingTokens.length > 0;
         const canBack = eng.playedCount > 0;
 
-        // Step controls stay visible in place; disabled during animation
-        // or when there's nothing to act on. Solve/Go are also disabled
-        // mid-animation so the user can't queue a new sequence on top.
-        // The whole playback group appears/disappears as a unit. Buttons
-        // inside it only toggle disabled state.
         if (this._playbackGroup) this._playbackGroup.hidden = !hasSequence;
         if (this._stepNext)     this._stepNext.disabled     = !(idle && moreAhead);
         if (this._stepPrev)     this._stepPrev.disabled     = !(idle && canBack);
@@ -438,9 +403,7 @@ export class InputManager {
         if (this._stepRevAll)   this._stepRevAll.disabled   = !(idle && canBack);
         if (this._stepSkip)     this._stepSkip.disabled     = !(eng.pendingTokens.length > 0 || !!op);
         if (this._stepSkipBack) this._stepSkipBack.disabled = !(eng.playedCount > 0 || !!op);
-        // Animation-aware enable: Scramble/Reset/Solve/Path lock while
-        // anything is in flight (step ops or a scramble draining through
-        // the animation queue).
+        // Scramble/Reset/Solve/Path lock while anything is in flight.
         const animating = !!eng.animation.current || eng.animation.queue.length > 0;
         const busy = !idle || animating || eng._solving;
         if (this._scrambleBtn) this._scrambleBtn.disabled = busy;
@@ -455,8 +418,7 @@ export class InputManager {
                 sp.classList.toggle('playing', i === headPos && !!op);
                 sp.classList.toggle('next', i === headPos && idle && i < total);
             });
-            // Slide the tape so the head sits at the viewport's center
-            // marker — head stays fixed, tape translates past it.
+            // Head stays fixed at viewport center; tape translates past it.
             const viewport = this._solverMoves.parentElement;
             if (viewport && hasSequence && headPos < spans.length) {
                 const head = spans[headPos];

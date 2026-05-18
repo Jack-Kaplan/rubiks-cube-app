@@ -1,34 +1,11 @@
-/**
- * Async client for the cube solver backend.
- *
- * Two-step protocol:
- *   POST /solve     → returns { jobId, status: "pending" }
- *   GET  /solve/:id → polls; eventually returns { status: "done", moves } or
- *                     { status: "error", error }.
- *
- * Polls every `pollInterval` ms up to `maxWaitMs` total. Surfaces progress
- * through an optional `onTick({ elapsedMs })` callback so the UI can show a
- * spinner / elapsed-time display while big-cube solves grind.
- */
-
 const DEFAULT_POLL_INTERVAL = 500;
 const DEFAULT_MAX_WAIT_MS = 10 * 60 * 1000;
 
 export class SolverClient {
     constructor(baseUrl) {
-        // Strip trailing slash so we can concatenate paths uniformly.
         this.baseUrl = (baseUrl || '').replace(/\/$/, '');
     }
 
-    /**
-     * Submit a solve and poll until it finishes (or fails).
-     * @param {number} N
-     * @param {string} state - URFDLB facelet string of length 6*N*N
-     * @param {object} opts
-     * @param {(info: {elapsedMs: number}) => void} opts.onTick
-     * @param {AbortSignal} opts.signal - abort the polling loop
-     * @returns {Promise<string[]>} list of move notation tokens
-     */
     async solve(N, state, opts = {}) {
         const {
             onTick,
@@ -64,7 +41,6 @@ export class SolverClient {
             const body = await r.json();
             if (body.status === 'done') return body.moves || [];
             if (body.status === 'error') throw new Error(body.error || 'solver error');
-            // else: pending, keep polling.
         }
     }
 }

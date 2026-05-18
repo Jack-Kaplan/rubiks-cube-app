@@ -1,8 +1,6 @@
 #!/bin/bash
-# One-time export: pull the lookup-tables cache out of a built cube-solver
-# image and write it to a single tarball you can host yourself (NAS, internal
-# nginx, etc.). Once on your NAS, point future builds at it via:
-#
+# Export the lookup-tables cache from a built image to a single tarball
+# for hosting yourself:
 #   docker compose build --build-arg TABLES_TARBALL_URL=http://nas.local/lookup-tables.tar.gz
 #
 # Usage:
@@ -20,10 +18,8 @@ if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
 fi
 
 echo "exporting lookup-tables/ from ${IMAGE} → ${OUT}"
-# Stream tar from inside a one-shot container so we don't materialize a
-# layer copy on the host. -C means "relative to /opt/...solver/" so the
-# tarball contains `lookup-tables/...` at the root — same shape the
-# prefetch script expects.
+# -C makes the tarball contain `lookup-tables/...` at root — the shape
+# the prefetch script and entrypoint expect.
 docker run --rm "${IMAGE}" \
     tar -cz -C /opt/rubiks-cube-NxNxN-solver lookup-tables > "${OUT}"
 
@@ -32,9 +28,3 @@ sha=$(sha256sum "${OUT}" | cut -d' ' -f1)
 echo
 echo "exported ${size} → ${OUT}"
 echo "sha256:  ${sha}"
-echo
-echo "next steps:"
-echo "  1. copy ${OUT} to your NAS"
-echo "  2. expose it via HTTP (any static file server)"
-echo "  3. build future images with:"
-echo "       docker compose build --build-arg TABLES_TARBALL_URL=http://<host>/$(basename "${OUT}")"

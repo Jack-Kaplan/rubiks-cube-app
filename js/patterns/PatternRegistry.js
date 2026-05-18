@@ -1,28 +1,9 @@
-/**
- * Named target patterns. Each preset is a (N) → URFDLB facelet string
- * (or null if unsupported on that N). The state is fed straight into
- * `engine.goToState(target)`.
- *
- * Bullseye now covers N=3..11. The N=3 case fits kociemba because the
- * bullseye state keeps centers face-colored (the absolute center on odd
- * N is forced to face color, and the outer ring is a derangement-rotation
- * of FACES that produces a kociemba-reachable corner+edge configuration).
- * Dots is still N=4-only. The remaining 3×3-only presets (cube-in-cube,
- * pi) are derived by applying canonical outer-turn algorithms to a fresh
- * solved cube and encoding the result.
- */
-
 import { CubePuzzle } from '../puzzles/cube/CubePuzzle.js';
 import { encodeFacelet } from '../solver/FaceletEncoder.js';
 import { decodeMove } from '../solver/MoveDecoder.js';
 
 const OPPOSITE = { U: 'D', D: 'U', L: 'R', R: 'L', F: 'B', B: 'F' };
 
-/**
- * Apply a whitespace-separated move sequence to a fresh solved cube of
- * size N and return the resulting URFDLB facelet string. Tokens go
- * through `decodeMove`, which handles the engine's Y-axis convention.
- */
 function applyAlg(N, alg) {
     const puzzle = new CubePuzzle();
     const cfg = { ...puzzle.defaultConfig, N };
@@ -38,31 +19,17 @@ function applyAlg(N, alg) {
 }
 
 // Per-N concentric-ring color tables. Index k = ring distance from the
-// face's nearest edge (0 = outermost). Each *column* (across faces) is
-// a permutation of FACES so each color appears exactly N² times across
-// the cube. Each *row* is Latin within the rings actually used on that
-// N, AND every entry in those rings is a derangement of the face color
-// — so each face shows the maximum distinct colors the geometry allows:
-// floor(N/2) non-face colors on the rings, plus the face color itself
-// at the absolute center on odd N (forced by the override below).
+// face's nearest edge (0 = outermost). Each *column* across faces is a
+// permutation of FACES (so each color appears exactly N² times across
+// the cube), and each entry on rings 0..R-1 is a derangement of the face
+// color (so faces show max distinct colors). Odd-N absolute center is
+// overridden to face color in bullseye() — its table value is unused.
 //
-// All tables were discovered by an offline parallel search against the
-// dwalton76/kociemba solver pipeline (see scripts/find_bullseye_table.py).
-// Col 0 is one of the 14 derangement cube rotations — a permutation σ
-// with σ(f) ≠ f for every face, induced by a 3D rotation so the corner
-// color triples at each cube corner are real pieces. The search pre-
-// filters the 6 edge-axis σ values on odd N: their 3×3 edge-parity
-// coupling fails directly through T-edges (single edge piece in the
-// middle of each cube-edge, no wing partner to absorb the flip). On
-// even N the wing orbits do absorb it, which is why even-N tables use
-// col 0 = RUBLDF (180° UR-DL edge axis) while odd-N tables use col 0
-// = RFULBD (120° URF-DLB body diagonal).
-//
-// Inner columns (col 1..R-1) were filled with derangements of FACES so
-// no face's ring 1..R-1 shows that face's own color, then validated
-// against the backend solver. The absolute-center sticker on odd N is
-// overridden to face color in bullseye() below — its table value is
-// unused, included only to keep every row length 6 for uniform indexing.
+// Tables were found by parallel search against the dwalton76/kociemba
+// pipeline (see scripts/find_bullseye_table.py). Odd-N col 0 = RFULBD
+// (120° body-diagonal rotation); even-N col 0 = RUBLDF (180° edge axis).
+// On odd N the 6 edge-axis derangements are pre-filtered because their
+// T-edge parity coupling fails through to kociemba.
 const RING_COLOR_BY_N = {
     3: {
         U: ['R', 'U', 'U', 'U', 'U', 'U'],
@@ -157,9 +124,8 @@ function bullseye(N) {
     return out;
 }
 
+// Single 2×2 opposite-color patch offset from center. Only verified on N=4.
 function dots(N) {
-    // Single 2x2 patch offset from center, opposite color. Avoids the
-    // absolute-center fixed sticker on odd N. Only verified reachable on N=4.
     const start = Math.floor((N - 2) / 2);
     const end = start + 2;
     let out = '';
@@ -174,13 +140,9 @@ function dots(N) {
     return out;
 }
 
-// 3×3-only patterns: target state derived by applying a known
-// outer-turn-only algorithm to solved.
 const CUBE_IN_CUBE_ALG = "F L F U' R U F2 L2 U' L' B D' B' L2 U";
 const PI_ALG = "R U2 R2 F R F' U2 R' F R F'";
 
-// Bullseye is supported on every N covered by RING_COLOR_BY_N — each
-// entry there was verified end-to-end against the solver backend.
 const BULLSEYE_NS = new Set(Object.keys(RING_COLOR_BY_N).map(Number));
 const DOTS_NS    = new Set([4]);
 
