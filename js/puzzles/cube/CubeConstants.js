@@ -5,12 +5,12 @@
 import { PIECE_GAP } from '../PuzzleDefinition.js';
 
 export const COLORS = {
-    0: '#FFE135', // Yellow (Top, Y-)
-    1: '#FF3B30', // Red    (Bottom, Y+)
-    2: '#32CD32', // Green  (Left, X-)
-    3: '#00CFFF', // Cyan   (Right, X+)
-    4: '#FF69B4', // Pink   (Front, Z+)
-    5: '#0066CC', // Blue   (Back, Z-)
+    0: '#ffd500', // Yellow (Top, Y-)
+    1: '#f2f0ea', // White  (Bottom, Y+)
+    2: '#18a83a', // Green  (Left, X-)
+    3: '#0057d9', // Blue   (Right, X+)
+    4: '#e3261e', // Red    (Front, Z+)
+    5: '#ff7a00', // Orange (Back, Z-)
 };
 
 export const CUBIE_SIZE = 0.5 * PIECE_GAP;
@@ -39,11 +39,11 @@ export const FACE_UV = [
 // Face info: face index → { axis, dir }
 export const FACE_INFO = [
     { axis: 1, dir: -1 }, // 0: Yellow (Top, Y-)
-    { axis: 1, dir:  1 }, // 1: Red    (Bottom, Y+)
+    { axis: 1, dir:  1 }, // 1: White  (Bottom, Y+)
     { axis: 0, dir: -1 }, // 2: Green  (Left, X-)
-    { axis: 0, dir:  1 }, // 3: Cyan   (Right, X+)
-    { axis: 2, dir:  1 }, // 4: Pink   (Front, Z+)
-    { axis: 2, dir: -1 }, // 5: Blue   (Back, Z-)
+    { axis: 0, dir:  1 }, // 3: Blue   (Right, X+)
+    { axis: 2, dir:  1 }, // 4: Red    (Front, Z+)
+    { axis: 2, dir: -1 }, // 5: Orange (Back, Z-)
 ];
 
 // Face axis lookup: face index → its axis
