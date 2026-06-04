@@ -1,0 +1,9 @@
+# Keep the build context small. The ~3GB lookup-table tarball is fetched
+# at build time via TABLES_TARBALL_URL, never COPYed — never ship it to the daemon.
+lookup-tables.tar.gz
+.git
+.env
+**/__pycache__/
+*.py[cod]
+*.claude
+notes.MD
